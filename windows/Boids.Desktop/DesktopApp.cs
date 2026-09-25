@@ -20,6 +20,7 @@ internal sealed class DesktopApp : ApplicationContext
     private nint parent;
     private string topology = "";
     private bool paused, locked, busy, exiting, rebuilding, captureStarted;
+    private string pauseSignature = "";
     private int recoveries;
     private long nextCheck, readyAt;
 
@@ -148,16 +149,26 @@ internal sealed class DesktopApp : ApplicationContext
 
     private void PumpInput()
     {
-        bool battery = settings.PauseBattery && SystemInformation.PowerStatus.PowerLineStatus == PowerLineStatus.Offline;
+        bool applyPowerRules = options.SmokeDirectory is null;
+        bool battery = applyPowerRules && settings.PauseBattery && SystemInformation.PowerStatus.PowerLineStatus == PowerLineStatus.Offline;
         nint foreground = DesktopShell.GetForegroundWindow();
         bool desktopActive = DesktopShell.IsDesktopForeground(foreground);
         bool gotPointer = DesktopShell.GetCursorPos(out var point);
+        // The desktop and our own wallpaper window both span the display; neither is a fullscreen app.
+        bool fullscreenCandidate = applyPowerRules && !options.Preview && settings.PauseFullscreen && !desktopActive &&
+            !windows.Any(window => !window.IsDisposed && window.Handle == foreground);
         foreach (var window in windows.ToArray())
         {
             if (window.IsDisposed) continue;
             Rectangle bounds = options.Preview ? window.RectangleToScreen(window.ClientRectangle) : window.DisplayBounds;
-            bool fullscreen = !options.Preview && settings.PauseFullscreen && DesktopShell.IsFullscreen(foreground, bounds);
+            bool fullscreen = fullscreenCandidate && DesktopShell.IsFullscreen(foreground, bounds);
             bool pause = paused || locked || battery || fullscreen;
+            string reason = paused ? "tray" : locked ? "locked" : battery ? "battery" : fullscreen ? "fullscreen" : "running";
+            if (!string.Equals(reason, pauseSignature, StringComparison.Ordinal))
+            {
+                pauseSignature = reason;
+                AppFiles.Log($"Playback {reason}; foreground={DesktopShell.ClassName(foreground)}");
+            }
             bool active = gotPointer && bounds.Contains(point.X, point.Y) && (desktopActive || options.Preview) && !pause;
             double x = Math.Clamp((point.X - bounds.Left) / (double)Math.Max(1, bounds.Width), 0, 1);
             double y = Math.Clamp((point.Y - bounds.Top) / (double)Math.Max(1, bounds.Height), 0, 1);
@@ -193,8 +204,8 @@ internal sealed class DesktopApp : ApplicationContext
             await window.CaptureAsync(Path.Combine(directory, $"monitor-{i + 1}.png"));
             var status = window.Status ?? throw new InvalidOperationException("No renderer status received");
             bool attached = options.Preview || DesktopShell.GetParent(window.Handle) == parent;
-            if (!attached || !status.TryGetProperty("frames", out var frames) || frames.GetInt64() <= 0)
-                throw new InvalidOperationException("Desktop attachment or animation evidence is missing");
+            if (!attached || !status.TryGetProperty("frames", out var frames) || frames.GetInt64() < 120)
+                throw new InvalidOperationException("Desktop attachment or at least two seconds of animation evidence is missing");
             results.Add(new { attached, screen = window.DisplayBounds.ToString(), status });
         }
         File.WriteAllText(Path.Combine(directory, "result.json"), JsonSerializer.Serialize(new
@@ -203,6 +214,7 @@ internal sealed class DesktopApp : ApplicationContext
             mode = options.Preview ? "preview" : "desktop",
             browserVersion = environment?.BrowserVersionString,
             bundledRuntime = File.Exists(Path.Combine(AppContext.BaseDirectory, "runtime", "msedgewebview2.exe")),
+            pauseRules = new { fullscreen = settings.PauseFullscreen, battery = settings.PauseBattery },
             monitors = results
         }, AppFiles.Json));
     }
@@ -264,8 +276,8 @@ internal sealed class DesktopApp : ApplicationContext
 
 internal sealed class SettingsDialog : Form
 {
-    private readonly NumericUpDown count = new() { Minimum = 20, Maximum = 1024, Increment = 32, Dock = DockStyle.Fill };
-    private readonly NumericUpDown speed = new() { Minimum = 0.25m, Maximum = 6, Increment = 0.25m, DecimalPlaces = 2, Dock = DockStyle.Fill };
+    private readonly NumericUpDown count = new() { Minimum = 20, Maximum = 4096, Increment = 256, Dock = DockStyle.Fill };
+    private readonly NumericUpDown speed = new() { Minimum = 0.25m, Maximum = 9, Increment = 0.25m, DecimalPlaces = 2, Dock = DockStyle.Fill };
     private readonly ComboBox fps = new() { DropDownStyle = ComboBoxStyle.DropDownList, Dock = DockStyle.Fill };
     private readonly ComboBox mode = new() { DropDownStyle = ComboBoxStyle.DropDownList, Dock = DockStyle.Fill };
     private readonly CheckBox fullscreen = new() { Text = "Pause under fullscreen apps", AutoSize = true };

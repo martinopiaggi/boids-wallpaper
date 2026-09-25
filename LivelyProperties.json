@@ -3,18 +3,18 @@
     "text": "Flock size",
     "type": "slider",
     "min": 20,
-    "max": 1024,
-    "tick": 100,
-    "value": 512
+    "max": 4096,
+    "tick": 256,
+    "value": 2048
   },
   "speed": {
     "text": "Speed",
     "type": "slider",
     "min": 0.25,
-    "max": 6,
+    "max": 9,
     "step": 0.01,
     "tick": 10,
-    "value": 4
+    "value": 6
   },
   "interaction": {
     "text": "Cursor",

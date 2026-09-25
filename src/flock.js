@@ -114,12 +114,12 @@ export class Flock {
   }
 
   setSpeed(value) {
-    this.speed = clamp(Number.isFinite(value) ? value : 1, 0.1, 6);
+    this.speed = clamp(Number.isFinite(value) ? value : 1, 0.1, 9);
     return this.speed;
   }
 
   setCount(value) {
-    const next = clamp(Math.round(Number(value) || 0), 0, 1024);
+    const next = clamp(Math.round(Number(value) || 0), 0, 4096);
     while (this.boids.length < next) this.boids.push(this.createBoid());
     while (this.accelerations.length < next) this.accelerations.push({ x: 0, y: 0 });
     this.boids.length = next;

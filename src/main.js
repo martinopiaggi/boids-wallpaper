@@ -11,8 +11,8 @@ const FIXED_STEP = 1 / TARGET_FPS;
 let frameMilliseconds = 1000 / TARGET_FPS;
 
 const defaults = Object.freeze({
-  count: 512,
-  speed: 4,
+  count: 2048,
+  speed: 6,
   fps: TARGET_FPS,
   interaction: "orbit",
 });
@@ -81,7 +81,7 @@ function applyProperty(name, value) {
       flock?.setCount(config.count);
       break;
     case "speed":
-      config.speed = clamp(parseNumber(value, config.speed), 0.25, 6);
+      config.speed = clamp(parseNumber(value, config.speed), 0.25, 9);
       gpu?.setSpeed(config.speed);
       flock?.setSpeed(config.speed);
       break;

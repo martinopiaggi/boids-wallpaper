@@ -9,8 +9,9 @@ from PIL import Image, ImageDraw
 ROOT = Path(__file__).resolve().parent.parent
 ASSETS = ROOT / "assets"
 TAU = math.tau
-MIN_SPEED = 184
-MAX_SPEED = 384
+MIN_SPEED = 276
+MAX_SPEED = 576
+MAX_FORCE = 1860
 
 
 class Point:
@@ -118,11 +119,11 @@ def step(flock: list[Point], width: int, height: int, delta_seconds: float) -> N
         acceleration_x = 0.0
         acceleration_y = 0.0
         if neighbors:
-            sx, sy = steer(separation_x, separation_y, boid.vx, boid.vy, MAX_SPEED, 310)
+            sx, sy = steer(separation_x, separation_y, boid.vx, boid.vy, MAX_SPEED, MAX_FORCE)
             ax, ay = cap(
                 (alignment_x / neighbors - boid.vx) * 1.05,
                 (alignment_y / neighbors - boid.vy) * 1.05,
-                310,
+                MAX_FORCE,
             )
             cx, cy = steer(
                 cohesion_x / neighbors,
@@ -130,11 +131,11 @@ def step(flock: list[Point], width: int, height: int, delta_seconds: float) -> N
                 boid.vx,
                 boid.vy,
                 MAX_SPEED,
-                310,
+                MAX_FORCE,
             )
             acceleration_x += sx * 1.55 + ax + cx * 0.78
             acceleration_y += sy * 1.55 + ay + cy * 0.78
-        accelerations.append(cap(acceleration_x, acceleration_y, 558))
+        accelerations.append(cap(acceleration_x, acceleration_y, MAX_FORCE * 1.8))
 
     for boid, (ax, ay) in zip(flock, accelerations, strict=True):
         boid.vx += ax * delta_seconds
@@ -193,14 +194,14 @@ def draw_frame(base: Image.Image, flock: list[Point]) -> Image.Image:
 def write_assets() -> None:
     ASSETS.mkdir(parents=True, exist_ok=True)
     thumbnail_base = background(640, 360)
-    thumbnail_flock = make_flock(640, 360, 580, 0xB01D5)
+    thumbnail_flock = make_flock(640, 360, 900, 0xB01D5)
     for _ in range(180):
         step(thumbnail_flock, 640, 360, 1 / 60)
     draw_frame(thumbnail_base, thumbnail_flock).save(ASSETS / "thumbnail.png", optimize=True)
 
     width, height = 320, 180
     preview_base = background(width, height)
-    preview_flock = make_flock(width, height, 288, 0xB01D5)
+    preview_flock = make_flock(width, height, 340, 0xB01D5)
     for _ in range(120):
         step(preview_flock, width, height, 1 / 60)
     frames = []

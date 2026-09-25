@@ -1,6 +1,6 @@
 import { clamp, createRandom } from "./flock.js";
 
-export const GPU_CAPACITY = 1024;
+export const GPU_CAPACITY = 4096;
 const STRIDE_FLOATS = 8;
 const STRIDE_BYTES = STRIDE_FLOATS * 4;
 const MODES = Object.freeze({ orbit: 0, follow: 1, avoid: 2, ignore: 3 });
@@ -338,7 +338,7 @@ export async function createGpuFlock(canvas, {
     width: Math.max(1, width),
     height: Math.max(1, height),
     count: clamp(Math.round(count) || 0, 0, GPU_CAPACITY),
-    speed: clamp(Number.isFinite(speed) ? speed : 1, 0.1, 6),
+    speed: clamp(Number.isFinite(speed) ? speed : 1, 0.1, 9),
     mode: 0,
     readIndex: 0,
     random,
@@ -396,7 +396,7 @@ export async function createGpuFlock(canvas, {
       state.count = next;
     },
     setSpeed(value) {
-      state.speed = clamp(Number.isFinite(value) ? value : 1, 0.1, 6);
+      state.speed = clamp(Number.isFinite(value) ? value : 1, 0.1, 9);
     },
     setMode(mode) {
       state.mode = MODES[mode] ?? 0;

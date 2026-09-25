@@ -92,8 +92,8 @@ internal static class AppFiles
 
 internal sealed record Settings
 {
-    public int Count { get; init; } = 512;
-    public double Speed { get; init; } = 4;
+    public int Count { get; init; } = 2048;
+    public double Speed { get; init; } = 6;
     public int Fps { get; init; } = 120;
     public string Interaction { get; init; } = "orbit";
     public bool PauseFullscreen { get; init; } = true;
@@ -101,8 +101,8 @@ internal sealed record Settings
 
     public Settings Validated() => this with
     {
-        Count = Math.Clamp(Count, 20, 1024),
-        Speed = double.IsFinite(Speed) ? Math.Clamp(Speed, 0.25, 6) : 4,
+        Count = Math.Clamp(Count, 20, 4096),
+        Speed = double.IsFinite(Speed) ? Math.Clamp(Speed, 0.25, 9) : 6,
         Fps = Fps is 30 or 60 or 120 ? Fps : 120,
         Interaction = Interaction is "orbit" or "follow" or "avoid" or "ignore" ? Interaction : "orbit"
     };
