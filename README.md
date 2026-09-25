@@ -32,7 +32,7 @@ The root `LivelyInfo.json` and `LivelyProperties.json` provide the thumbnail, pr
 | Property | Values | Default |
 | --- | --- | --- |
 | Flock size | 20–1024 | 256 |
-| Speed | 0.25–4× | 2.7× |
+| Speed | 0.25–6× | 4× |
 | Cursor | Orbit, Follow, Avoid, Ignore | Orbit |
 
 ## Development

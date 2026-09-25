@@ -334,7 +334,7 @@ export async function createGpuFlock(canvas, {
     width: Math.max(1, width),
     height: Math.max(1, height),
     count: clamp(Math.round(count) || 0, 0, GPU_CAPACITY),
-    speed: clamp(Number.isFinite(speed) ? speed : 1, 0.1, 4),
+    speed: clamp(Number.isFinite(speed) ? speed : 1, 0.1, 6),
     mode: 0,
     readIndex: 0,
     random,
@@ -392,7 +392,7 @@ export async function createGpuFlock(canvas, {
       state.count = next;
     },
     setSpeed(value) {
-      state.speed = clamp(Number.isFinite(value) ? value : 1, 0.1, 4);
+      state.speed = clamp(Number.isFinite(value) ? value : 1, 0.1, 6);
     },
     setMode(mode) {
       state.mode = MODES[mode] ?? 0;

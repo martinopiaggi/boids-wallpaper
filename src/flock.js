@@ -114,7 +114,7 @@ export class Flock {
   }
 
   setSpeed(value) {
-    this.speed = clamp(Number.isFinite(value) ? value : 1, 0.1, 4);
+    this.speed = clamp(Number.isFinite(value) ? value : 1, 0.1, 6);
     return this.speed;
   }
 

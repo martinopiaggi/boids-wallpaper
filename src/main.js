@@ -12,7 +12,7 @@ const FRAME_MS = 1000 / TARGET_FPS;
 
 const defaults = Object.freeze({
   count: 256,
-  speed: 2.7,
+  speed: 4,
   interaction: "orbit",
 });
 
@@ -65,7 +65,7 @@ function applyProperty(name, value) {
       flock?.setCount(config.count);
       break;
     case "speed":
-      config.speed = clamp(parseNumber(value, config.speed), 0.25, 4);
+      config.speed = clamp(parseNumber(value, config.speed), 0.25, 6);
       gpu?.setSpeed(config.speed);
       flock?.setSpeed(config.speed);
       break;

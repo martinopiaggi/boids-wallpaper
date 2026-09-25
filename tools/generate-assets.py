@@ -9,8 +9,8 @@ from PIL import Image, ImageDraw
 ROOT = Path(__file__).resolve().parent.parent
 ASSETS = ROOT / "assets"
 TAU = math.tau
-MIN_SPEED = 124
-MAX_SPEED = 259
+MIN_SPEED = 184
+MAX_SPEED = 384
 
 
 class Point:
