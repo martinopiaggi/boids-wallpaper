@@ -18,6 +18,16 @@ Open <http://127.0.0.1:4173>. The project has no install step or third-party pac
 - Press `Space` to pause or resume.
 - Press `F` for fullscreen.
 
+## Standalone Windows desktop
+
+`windows/Boids.Desktop` is a self-contained WinForms/WebView2 host. It places the same page behind the desktop icons, without Lively, and exposes Pause, Settings, Reattach, and Exit through its tray icon. `--preview` opens a normal window instead. Build it with the .NET 8 SDK:
+
+```powershell
+dotnet publish windows/Boids.Desktop/Boids.Desktop.csproj -c Release -r win-x64 --self-contained true -o dist/BoidsWallpaper-win-x64
+```
+
+For a PC without the WebView2 Evergreen Runtime, copy a fixed-version runtime into `dist/BoidsWallpaper-win-x64/runtime` so `msedgewebview2.exe` is directly inside it. `scripts/package-windows.ps1` does both steps and writes `dist/BoidsWallpaper-win-x64.zip`. Settings are stored in `%LOCALAPPDATA%\BoidsWallpaper\settings.json`; the original desktop wallpaper is never modified.
+
 ## Install in Lively Wallpaper
 
 1. Open Lively Wallpaper.
@@ -25,13 +35,13 @@ Open <http://127.0.0.1:4173>. The project has no install step or third-party pac
 3. Select this repository folder.
 4. Select **Boids** and apply it to a display.
 
-The root `LivelyInfo.json` and `LivelyProperties.json` provide the thumbnail, preview, playback integration, and controls for flock size, speed, and cursor behavior. Triangles are exactly white on exactly black. Pointer movement steers the flock, while clicks have no effect. The simulation runs at 120 Hz and drawing is capped at 120 fps. WebGPU runs both the flocking rules and the triangle drawing on the graphics card; Canvas 2D is the automatic fallback. Lively can pause the simulation when playback is disabled or the wallpaper is not visible.
+The root `LivelyInfo.json` and `LivelyProperties.json` provide the thumbnail, preview, playback integration, and controls for flock size, speed, and cursor behavior. Triangles are exactly white on exactly black. The pointer position strongly steers most of the flock for as long as it remains on screen, while clicks have no effect. The simulation runs at 120 Hz and drawing is capped at 120 fps. WebGPU runs both the flocking rules and the triangle drawing on the graphics card; Canvas 2D is the automatic fallback. Lively can pause the simulation when playback is disabled or the wallpaper is not visible.
 
 ## Controls in Lively
 
 | Property | Values | Default |
 | --- | --- | --- |
-| Flock size | 20–1024 | 256 |
+| Flock size | 20–1024 | 512 |
 | Speed | 0.25–6× | 4× |
 | Cursor | Orbit, Follow, Avoid, Ignore | Orbit |
 

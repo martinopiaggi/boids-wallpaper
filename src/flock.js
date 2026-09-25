@@ -216,7 +216,7 @@ export class Flock {
     if (dy > halfHeight) dy -= this.height;
     else if (dy < -halfHeight) dy += this.height;
     let distance = Math.hypot(dx, dy);
-    const radius = mode === "follow" ? 330 : 270;
+    const radius = Math.max(640, Math.min(this.width, this.height) * (mode === "follow" ? 0.95 : 0.85));
     if (distance >= radius) return out;
     if (distance < 0.001) {
       const angle = boid.phase * TAU;
@@ -227,8 +227,8 @@ export class Flock {
 
     const radialX = dx / distance;
     const radialY = dy / distance;
-    const falloff = (1 - distance / radius) ** 2;
-    const force = this.maxForce * falloff;
+    const falloff = (1 - distance / radius) ** 0.55;
+    const force = this.maxForce * 4.5 * falloff;
 
     if (mode === "follow") {
       out.x = radialX * force;
@@ -241,9 +241,10 @@ export class Flock {
       return out;
     }
 
-    const ringError = clamp((distance - 135) / 135, -1, 1);
-    out.x = -radialY * force * 0.72 - radialX * ringError * force * 0.3;
-    out.y = radialX * force * 0.72 - radialY * ringError * force * 0.3;
+    const ring = Math.min(420, radius * 0.42);
+    const ringError = clamp((distance - ring) / ring, -1, 1);
+    out.x = -radialY * force * 1.35 + radialX * ringError * force * 1.1;
+    out.y = radialX * force * 1.35 + radialY * ringError * force * 1.1;
     return out;
   }
 
@@ -351,7 +352,8 @@ export class Flock {
         acceleration = { x: 0, y: 0 };
         this.accelerations[index] = acceleration;
       }
-      capInto(acceleration, accelerationX, accelerationY, maxForce * 1.8);
+      const influenced = pointerSteering.x !== 0 || pointerSteering.y !== 0;
+      capInto(acceleration, accelerationX, accelerationY, maxForce * (influenced ? 6 : 1.8));
     }
 
     const minSpeed = this.minSpeed;

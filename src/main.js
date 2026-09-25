@@ -1,23 +1,24 @@
 import { Flock, clamp, createRandom } from "./flock.js";
 import { GPU_CAPACITY, createGpuFlock } from "./webgpu.js";
+import { attachHostBridge } from "./host.js";
 
-const canvas = document.querySelector("#boids");
+let canvas = document.querySelector("#boids");
 const errorBox = document.querySelector("#error");
-const BACKGROUND = "#000";
 const FOREGROUND = "#fff";
 
 const TARGET_FPS = 120;
 const FIXED_STEP = 1 / TARGET_FPS;
-const FRAME_MS = 1000 / TARGET_FPS;
+let frameMilliseconds = 1000 / TARGET_FPS;
 
 const defaults = Object.freeze({
-  count: 256,
+  count: 512,
   speed: 4,
+  fps: TARGET_FPS,
   interaction: "orbit",
 });
 
 const config = { ...defaults };
-const pointer = { x: 0, y: 0, active: false, mode: config.interaction, lastMove: 0 };
+const pointer = { x: 0, y: 0, active: false, mode: config.interaction };
 const interactionModes = Object.freeze(["orbit", "follow", "avoid", "ignore"]);
 
 let width = 1;
@@ -30,14 +31,29 @@ let lastFrame = performance.now();
 let nextFrameAt = 0;
 let triangleSize = 6;
 let animationFrame = null;
-let frameTimer = null;
 let renderContext;
 let flock;
 let gpu;
 let backend = "none";
+let frameCount = 0;
+let elapsedRunning = 0;
+let resizeObserver;
+const nativeHost = new URLSearchParams(location.search).get("desktop") === "1" && window.chrome?.webview;
+const hostBridge = nativeHost ? attachHostBridge(nativeHost, {
+  configure: applyProperty,
+  pause: setHostPaused,
+  pointer: value => Object.assign(pointer, {
+    x: value.x * Math.max(1, canvas.clientWidth),
+    y: value.y * Math.max(1, canvas.clientHeight),
+    active: value.active
+  }),
+  status: () => ({ backend, count: config.count, speed: config.speed, targetFps: config.fps,
+    frames: frameCount, averageFps: elapsedRunning > 0 ? frameCount / elapsedRunning : 0 }),
+}) : null;
 
 function showError(error) {
   console.error(error);
+  hostBridge?.error(error);
   if (!errorBox) return;
   errorBox.hidden = false;
   errorBox.textContent = "The wallpaper could not start. Reload this page to try again.";
@@ -68,6 +84,11 @@ function applyProperty(name, value) {
       config.speed = clamp(parseNumber(value, config.speed), 0.25, 6);
       gpu?.setSpeed(config.speed);
       flock?.setSpeed(config.speed);
+      break;
+    case "fps":
+      config.fps = [30, 60, 120].includes(Number(value)) ? Number(value) : config.fps;
+      frameMilliseconds = 1000 / config.fps;
+      nextFrameAt = performance.now();
       break;
     case "interaction":
       config.interaction = normalizeDropdown(value, interactionModes, config.interaction);
@@ -140,22 +161,11 @@ function isRunning() {
 function stopLoop() {
   accumulator = 0;
   if (animationFrame !== null) cancelAnimationFrame(animationFrame);
-  if (frameTimer !== null) clearTimeout(frameTimer);
   animationFrame = null;
-  frameTimer = null;
 }
 
 function scheduleFrame() {
-  if (!isRunning() || animationFrame !== null || frameTimer !== null) return;
-  const wait = nextFrameAt - performance.now() - 3;
-  if (wait > 4) {
-    frameTimer = setTimeout(() => {
-      frameTimer = null;
-      animationFrame = requestAnimationFrame(frame);
-    }, wait);
-  } else {
-    animationFrame = requestAnimationFrame(frame);
-  }
+  if (isRunning() && animationFrame === null) animationFrame = requestAnimationFrame(frame);
 }
 
 function synchronizeLoop() {
@@ -163,7 +173,7 @@ function synchronizeLoop() {
     stopLoop();
     return;
   }
-  if (animationFrame === null && frameTimer === null) {
+  if (animationFrame === null) {
     lastFrame = performance.now();
     nextFrameAt = lastFrame;
     scheduleFrame();
@@ -179,13 +189,19 @@ function frame(now) {
   }
 
   if (gpu?.lost) {
-    contextLost = true;
     stopLoop();
+    try {
+      startCanvasFallback();
+      resize();
+      hostBridge?.ready();
+      synchronizeLoop();
+    } catch (error) {
+      showError(error);
+    }
     return;
   }
   const elapsed = Math.min(0.1, Math.max(0, (now - lastFrame) / 1000));
   lastFrame = now;
-  if (now - pointer.lastMove > 2400) pointer.active = false;
   accumulator = Math.min(accumulator + elapsed, 0.1);
   let steps = 0;
   while (accumulator >= FIXED_STEP && steps < 8) {
@@ -195,8 +211,10 @@ function frame(now) {
   }
   if (backend === "webgpu") gpu.tick(steps, FIXED_STEP, pointer);
   else render(renderContext);
-  nextFrameAt += FRAME_MS;
-  if (nextFrameAt <= now + 0.5) nextFrameAt = now + FRAME_MS;
+  frameCount += 1;
+  elapsedRunning += elapsed;
+  nextFrameAt += frameMilliseconds;
+  if (nextFrameAt <= now - frameMilliseconds) nextFrameAt = now + frameMilliseconds;
   scheduleFrame();
 }
 
@@ -205,15 +223,18 @@ function updatePointer(event) {
   pointer.x = clamp(event.clientX - rect.left, 0, width);
   pointer.y = clamp(event.clientY - rect.top, 0, height);
   pointer.active = true;
-  pointer.lastMove = performance.now();
+}
+
+function installCanvasInteractions() {
+  if (!nativeHost) {
+    canvas.addEventListener("pointermove", updatePointer, { passive: true });
+    canvas.addEventListener("pointerenter", updatePointer, { passive: true });
+    canvas.addEventListener("pointerleave", () => { pointer.active = false; });
+  }
 }
 
 function installInteractions() {
-  canvas.addEventListener("pointermove", updatePointer, { passive: true });
-  canvas.addEventListener("pointerenter", updatePointer, { passive: true });
-  canvas.addEventListener("pointerleave", () => {
-    pointer.active = false;
-  });
+  installCanvasInteractions();
   window.addEventListener("keydown", event => {
     if (event.repeat || event.ctrlKey || event.metaKey || event.altKey) return;
     if (event.code === "Space") {
@@ -239,7 +260,8 @@ function installInteractions() {
     synchronizeLoop();
   });
   window.addEventListener("resize", resize, { passive: true });
-  new ResizeObserver(resize).observe(canvas);
+  resizeObserver = new ResizeObserver(resize);
+  resizeObserver.observe(canvas);
 }
 
 function exposeLivelyBridge() {
@@ -252,8 +274,25 @@ function exposeLivelyBridge() {
   }
 }
 
+function startCanvasFallback() {
+  gpu?.dispose();
+  gpu = null;
+  // Canvas contexts cannot change type once acquired, including after failed GPU initialization.
+  const replacement = canvas.cloneNode(false);
+  resizeObserver?.disconnect();
+  canvas.replaceWith(replacement);
+  canvas = replacement;
+  renderContext = canvas.getContext("2d", { alpha: false, desynchronized: true });
+  if (!renderContext) throw new Error("Canvas 2D is unavailable");
+  flock = new Flock({ width, height, count: config.count, speed: config.speed, random: createRandom(0xb01d5) });
+  backend = "canvas";
+  if (resizeObserver) {
+    installCanvasInteractions();
+    resizeObserver.observe(canvas);
+  }
+}
+
 async function start() {
-  installInteractions();
   exposeLivelyBridge();
   const rect = canvas.getBoundingClientRect();
   width = Math.max(1, rect.width);
@@ -266,23 +305,17 @@ async function start() {
       speed: config.speed,
       random: createRandom(0xb01d5),
     });
+    gpu.setCount(config.count);
+    gpu.setSpeed(config.speed);
     gpu.setMode(config.interaction);
     backend = "webgpu";
   } catch (error) {
     console.warn(error);
-    gpu = null;
-    renderContext = canvas.getContext("2d", { alpha: false, desynchronized: true });
-    if (!renderContext) throw new Error("Neither WebGPU nor Canvas 2D is available");
-    flock = new Flock({
-      width,
-      height,
-      count: config.count,
-      speed: config.speed,
-      random: createRandom(0xb01d5),
-    });
-    backend = "canvas";
+    startCanvasFallback();
   }
+  installInteractions();
   resize();
+  hostBridge?.ready();
   synchronizeLoop();
 }
 

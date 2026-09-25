@@ -65,7 +65,8 @@ fn pointer_force(position: vec2<f32>, phase: f32) -> vec2<f32> {
   var dx = shortest(sim.pointer_x - position.x, sim.width);
   var dy = shortest(sim.pointer_y - position.y, sim.height);
   var distance = length(vec2<f32>(dx, dy));
-  let radius = select(270.0, 330.0, sim.pointer_mode > 0.5 && sim.pointer_mode < 1.5);
+  let screen = min(sim.width, sim.height);
+  let radius = max(640.0, screen * select(0.85, 0.95, sim.pointer_mode > 0.5 && sim.pointer_mode < 1.5));
   if (distance >= radius) { return vec2<f32>(0.0); }
   if (distance < 0.001) {
     let angle = phase * 6.283185307179586;
@@ -74,13 +75,14 @@ fn pointer_force(position: vec2<f32>, phase: f32) -> vec2<f32> {
     distance = 1.0;
   }
   let radial = vec2<f32>(dx, dy) / distance;
-  let falloff = pow(1.0 - distance / radius, 2.0);
-  let force = sim.max_force * falloff;
+  let falloff = pow(1.0 - distance / radius, 0.55);
+  let force = sim.max_force * 4.5 * falloff;
   if (sim.pointer_mode > 0.5 && sim.pointer_mode < 1.5) { return radial * force; }
   if (sim.pointer_mode > 1.5) { return -radial * force; }
   let tangent = vec2<f32>(-radial.y, radial.x);
-  let ring_error = clamp((distance - 135.0) / 135.0, -1.0, 1.0);
-  return tangent * force * 0.72 - radial * ring_error * force * 0.3;
+  let ring = min(420.0, radius * 0.42);
+  let ring_error = clamp((distance - ring) / ring, -1.0, 1.0);
+  return tangent * force * 1.35 + radial * ring_error * force * 1.1;
 }
 
 @compute @workgroup_size(64)
@@ -120,8 +122,10 @@ fn simulate(@builtin(global_invocation_id) id: vec3<u32>) {
     acceleration += limit((alignment / neighbors - boid.velocity) * 1.05, sim.max_force);
     acceleration += steer(cohesion / neighbors, boid.velocity, sim.max_speed, sim.max_force) * 0.78;
   }
-  acceleration += pointer_force(boid.position, boid.phase);
-  acceleration = limit(acceleration, sim.max_force * 1.8);
+  let pointer_steering = pointer_force(boid.position, boid.phase);
+  acceleration += pointer_steering;
+  let influenced = any(pointer_steering != vec2<f32>(0.0));
+  acceleration = limit(acceleration, sim.max_force * select(1.8, 6.0, influenced));
 
   var velocity = boid.velocity + acceleration * sim.dt;
   let speed = length(velocity);

@@ -193,14 +193,14 @@ def draw_frame(base: Image.Image, flock: list[Point]) -> Image.Image:
 def write_assets() -> None:
     ASSETS.mkdir(parents=True, exist_ok=True)
     thumbnail_base = background(640, 360)
-    thumbnail_flock = make_flock(640, 360, 290, 0xB01D5)
+    thumbnail_flock = make_flock(640, 360, 580, 0xB01D5)
     for _ in range(180):
         step(thumbnail_flock, 640, 360, 1 / 60)
     draw_frame(thumbnail_base, thumbnail_flock).save(ASSETS / "thumbnail.png", optimize=True)
 
     width, height = 320, 180
     preview_base = background(width, height)
-    preview_flock = make_flock(width, height, 144, 0xB01D5)
+    preview_flock = make_flock(width, height, 288, 0xB01D5)
     for _ in range(120):
         step(preview_flock, width, height, 1 / 60)
     frames = []

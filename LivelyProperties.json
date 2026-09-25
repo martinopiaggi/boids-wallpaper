@@ -5,7 +5,7 @@
     "min": 20,
     "max": 1024,
     "tick": 100,
-    "value": 256
+    "value": 512
   },
   "speed": {
     "text": "Speed",

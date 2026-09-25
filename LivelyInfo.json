@@ -3,7 +3,7 @@
   "Title": "Boids",
   "Thumbnail": "assets/thumbnail.png",
   "Preview": "assets/preview.gif",
-  "Desc": "256 white triangle boids on black at 120 fps, simulated on WebGPU when available. Pointer position steers the flock; clicks do nothing.",
+  "Desc": "512 white triangle boids on black at 120 fps, simulated on WebGPU when available. Pointer position steers the flock; clicks do nothing.",
   "Author": "martinopiaggi",
   "License": "MIT",
   "Contact": "https://github.com/martinopiaggi/boids-wallpaper",

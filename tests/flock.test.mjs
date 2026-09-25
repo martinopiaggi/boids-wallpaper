@@ -69,6 +69,36 @@ test("speed remains within minimum and maximum limits", () => {
   }
 });
 
+test("cursor influence is strong beyond the old 270px radius", () => {
+  const flock = new Flock({ width: 2560, height: 1440, count: 1, speed: 4 });
+  const boid = { x: 600, y: 720, vx: 0, vy: 384, phase: 0 };
+  const force = flock.pointerForce(boid, { x: 1280, y: 720, active: true, mode: "orbit" });
+  assert.ok(Math.hypot(force.x, force.y) > flock.maxForce * 3);
+  assert.ok(force.x > 0, "outside the orbit, steer inward toward the pointer");
+  assert.ok(force.y > 0, "retain tangential orbit steering");
+});
+
+test("orbit repels boids inside its ring instead of collapsing them onto the pointer", () => {
+  const flock = new Flock({ width: 2560, height: 1440, count: 1, speed: 4 });
+  const force = flock.pointerForce(
+    { x: 1180, y: 720, vx: 0, vy: 384, phase: 0 },
+    { x: 1280, y: 720, active: true, mode: "orbit" },
+  );
+  assert.ok(force.x < 0);
+  assert.ok(force.y > 0);
+});
+
+test("inactive and ignored pointers do not steer the flock", () => {
+  const flock = new Flock({ width: 2560, height: 1440, count: 1 });
+  const boid = { x: 1280, y: 720, vx: 90, vy: 0, phase: 0 };
+  for (const pointer of [
+    { x: 1380, y: 720, active: false, mode: "orbit" },
+    { x: 1380, y: 720, active: true, mode: "ignore" },
+  ]) {
+    assert.deepEqual(flock.pointerForce(boid, pointer), { x: 0, y: 0 });
+  }
+});
+
 test("count changes are deterministic with a seeded generator", () => {
   const first = new Flock({ width: 800, height: 600, count: 24, random: createRandom(99) });
   const second = new Flock({ width: 800, height: 600, count: 24, random: createRandom(99) });
