@@ -3,7 +3,7 @@
   "Title": "Boids",
   "Thumbnail": "assets/thumbnail.png",
   "Preview": "assets/preview.gif",
-  "Desc": "Classic triangle boids flocking simulation with interactive, luminous trails.",
+  "Desc": "Classic triangle boids flocking simulation with flat colors and no visual effects.",
   "Author": "martinopiaggi",
   "License": "MIT",
   "Contact": "https://github.com/martinopiaggi/boids-wallpaper",

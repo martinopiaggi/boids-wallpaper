@@ -5,11 +5,13 @@ import math
 import random
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFilter
+from PIL import Image, ImageDraw
 
 ROOT = Path(__file__).resolve().parent.parent
 ASSETS = ROOT / "assets"
 TAU = math.tau
+MIN_SPEED = 53
+MAX_SPEED = 110
 
 
 class Point:
@@ -26,7 +28,7 @@ def make_flock(width: int, height: int, count: int, seed: int) -> list[Point]:
     flock = []
     for _ in range(count):
         angle = rng.random() * TAU
-        speed = rng.uniform(46, 96)
+        speed = rng.uniform(MIN_SPEED, MAX_SPEED)
         flock.append(
             Point(
                 rng.random() * width,
@@ -117,13 +119,20 @@ def step(flock: list[Point], width: int, height: int, delta_seconds: float) -> N
         acceleration_x = 0.0
         acceleration_y = 0.0
         if neighbors:
-            sx, sy = steer(separation_x, separation_y, boid.vx, boid.vy, 96, 310)
+            sx, sy = steer(separation_x, separation_y, boid.vx, boid.vy, MAX_SPEED, 310)
             ax, ay = cap(
                 (alignment_x / neighbors - boid.vx) * 1.05,
                 (alignment_y / neighbors - boid.vy) * 1.05,
                 310,
             )
-            cx, cy = steer(cohesion_x / neighbors, cohesion_y / neighbors, boid.vx, boid.vy, 96, 310)
+            cx, cy = steer(
+                cohesion_x / neighbors,
+                cohesion_y / neighbors,
+                boid.vx,
+                boid.vy,
+                MAX_SPEED,
+                310,
+            )
             acceleration_x += sx * 1.55 + ax + cx * 0.78
             acceleration_y += sy * 1.55 + ay + cy * 0.78
         accelerations.append(cap(acceleration_x, acceleration_y, 558))
@@ -132,55 +141,40 @@ def step(flock: list[Point], width: int, height: int, delta_seconds: float) -> N
         boid.vx += ax * delta_seconds
         boid.vy += ay * delta_seconds
         speed = math.hypot(boid.vx, boid.vy)
-        if speed > 96:
-            boid.vx *= 96 / speed
-            boid.vy *= 96 / speed
-            speed = 96
-        if speed < 46:
+        if speed > MAX_SPEED:
+            boid.vx *= MAX_SPEED / speed
+            boid.vy *= MAX_SPEED / speed
+            speed = MAX_SPEED
+        if speed < MIN_SPEED:
             if speed < 0.000001:
-                boid.vx = math.cos(boid.phase * TAU) * 46
-                boid.vy = math.sin(boid.phase * TAU) * 46
+                boid.vx = math.cos(boid.phase * TAU) * MIN_SPEED
+                boid.vy = math.sin(boid.phase * TAU) * MIN_SPEED
             else:
-                boid.vx *= 46 / speed
-                boid.vy *= 46 / speed
+                boid.vx *= MIN_SPEED / speed
+                boid.vy *= MIN_SPEED / speed
         boid.x = wrap(boid.x + boid.vx * delta_seconds, width)
         boid.y = wrap(boid.y + boid.vy * delta_seconds, height)
 
 
-def background(width: int, height: int, seed: int) -> Image.Image:
-    image = Image.new("RGB", (width, height))
-    pixels = image.load()
-    for y in range(height):
-        vertical = y / max(1, height - 1)
-        for x in range(width):
-            horizontal = x / max(1, width - 1)
-            radial = max(0.0, 1.0 - math.hypot(horizontal - 0.48, vertical - 0.44) / 0.78)
-            edge = abs(horizontal - 0.5) + abs(vertical - 0.5)
-            pixels[x, y] = (
-                round(2 + 8 * radial - 2 * edge),
-                round(4 + 18 * radial - 3 * edge),
-                round(12 + 42 * radial - 8 * edge),
-            )
-    stars = ImageDraw.Draw(image)
-    rng = random.Random(seed)
-    for _ in range(max(20, width * height // 18000)):
-        x = rng.randrange(width)
-        y = rng.randrange(height)
-        value = rng.randint(10, 34)
-        stars.point((x, y), fill=(70 + value, 100 + value, 145 + value))
-    return image
+def background(width: int, height: int) -> Image.Image:
+    return Image.new("RGB", (width, height), (2, 4, 11))
 
 
-def triangle(boid: Point, size: float, scale: float = 1.0) -> list[tuple[float, float]]:
+def triangle(boid: Point, size: float) -> list[tuple[float, float]]:
     angle = math.atan2(boid.vy, boid.vx)
     cosine = math.cos(angle)
     sine = math.sin(angle)
-    length = size * scale
-    half_width = length * 0.48
+    half_width = size * 0.48
     return [
-        (boid.x + cosine * length, boid.y + sine * length),
-        (boid.x - cosine * length * 0.58 - sine * half_width, boid.y - sine * length * 0.58 + cosine * half_width),
-        (boid.x - cosine * length * 0.58 + sine * half_width, boid.y - sine * length * 0.58 - cosine * half_width),
+        (boid.x + cosine * size, boid.y + sine * size),
+        (
+            boid.x - cosine * size * 0.58 - sine * half_width,
+            boid.y - sine * size * 0.58 + cosine * half_width,
+        ),
+        (
+            boid.x - cosine * size * 0.58 + sine * half_width,
+            boid.y - sine * size * 0.58 - cosine * half_width,
+        ),
     ]
 
 
@@ -189,44 +183,34 @@ def color_for(boid: Point) -> tuple[int, int, int, int]:
     saturation = 0.92
     lightness = 0.62
     red, green, blue = colorsys.hls_to_rgb(hue, lightness, saturation)
-    return round(red * 255), round(green * 255), round(blue * 255), 235
+    return round(red * 255), round(green * 255), round(blue * 255), 255
 
 
-def draw_frame(base: Image.Image, flock: list[Point], fade: int | None) -> Image.Image:
-    frame = base.convert("RGBA")
-    if fade is not None:
-        frame = Image.alpha_composite(frame, Image.new("RGBA", frame.size, (3, 7, 18, fade)))
-    glow = Image.new("RGBA", frame.size, (0, 0, 0, 0))
-    glow_draw = ImageDraw.Draw(glow)
+def draw_frame(base: Image.Image, flock: list[Point]) -> Image.Image:
+    frame = base.copy()
     draw = ImageDraw.Draw(frame)
     size = max(4.2, min(frame.size) / 118)
     for boid in flock:
-        color = color_for(boid)
-        glow_color = (color[0], color[1], color[2], 42)
-        glow_draw.polygon(triangle(boid, size, 1.85), fill=glow_color)
-    frame = Image.alpha_composite(frame, glow.filter(ImageFilter.GaussianBlur(max(1.2, size * 0.42))))
-    draw = ImageDraw.Draw(frame)
-    for boid in flock:
         draw.polygon(triangle(boid, size), fill=color_for(boid))
-    return frame.convert("RGB")
+    return frame
 
 
 def write_assets() -> None:
     ASSETS.mkdir(parents=True, exist_ok=True)
-    thumbnail_base = background(640, 360, 0x51A7F00D)
+    thumbnail_base = background(640, 360)
     thumbnail_flock = make_flock(640, 360, 145, 0xB01D5)
     for _ in range(180):
         step(thumbnail_flock, 640, 360, 1 / 60)
-    draw_frame(thumbnail_base, thumbnail_flock, None).save(ASSETS / "thumbnail.png", optimize=True)
+    draw_frame(thumbnail_base, thumbnail_flock).save(ASSETS / "thumbnail.png", optimize=True)
 
     width, height = 320, 180
-    preview_base = background(width, height, 0x51A7F00D)
+    preview_base = background(width, height)
     preview_flock = make_flock(width, height, 72, 0xB01D5)
     for _ in range(120):
         step(preview_flock, width, height, 1 / 60)
     frames = []
     for _ in range(48):
-        frame = draw_frame(preview_base, preview_flock, 70)
+        frame = draw_frame(preview_base, preview_flock)
         frames.append(frame.quantize(colors=128, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE))
         step(preview_flock, width, height, 1 / 30)
     frames[0].save(

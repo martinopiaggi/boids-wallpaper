@@ -5,16 +5,13 @@ const errorBox = document.querySelector("#error");
 
 const defaults = Object.freeze({
   count: 128,
-  speed: 1,
-  trails: 56,
+  speed: 1.15,
   palette: "aurora",
-  glow: true,
   interaction: "orbit",
 });
 
 const config = { ...defaults };
 const pointer = { x: 0, y: 0, active: false, mode: config.interaction, lastMove: 0 };
-const ripples = [];
 const palettes = Object.freeze({
   aurora: { hue: 154, spread: 104, saturation: 92, light: 62 },
   ice: { hue: 188, spread: 72, saturation: 82, light: 66 },
@@ -75,14 +72,8 @@ function applyProperty(name, value) {
       config.speed = clamp(parseNumber(value, config.speed), 0.25, 2.5);
       flock?.setSpeed(config.speed);
       break;
-    case "trails":
-      config.trails = clamp(Math.round(parseNumber(value, config.trails)), 0, 100);
-      break;
     case "palette":
       config.palette = normalizePalette(value);
-      break;
-    case "glow":
-      config.glow = value === true || value === 1 || value === "1" || String(value).toLowerCase() === "true";
       break;
     case "interaction":
       config.interaction = normalizeInteraction(value);
@@ -106,12 +97,7 @@ function resize() {
   const rect = canvas.getBoundingClientRect();
   width = Math.max(1, rect.width);
   height = Math.max(1, rect.height);
-  const pixelBudget = 3_400_000;
-  const ratio = Math.min(
-    window.devicePixelRatio || 1,
-    1.5,
-    Math.sqrt(pixelBudget / (width * height)),
-  );
+  const ratio = Math.max(1, window.devicePixelRatio || 1);
   const renderWidth = Math.max(1, Math.round(width * ratio));
   const renderHeight = Math.max(1, Math.round(height * ratio));
   if (canvas.width !== renderWidth || canvas.height !== renderHeight) {
@@ -121,35 +107,8 @@ function resize() {
 
   renderContext.setTransform(ratio, 0, 0, ratio, 0, 0);
   flock?.resize(width, height);
-  paintBackground(renderContext);
-}
-
-function paintBackground(context) {
-  const gradient = context.createRadialGradient(
-    width * 0.48,
-    height * 0.44,
-    0,
-    width * 0.48,
-    height * 0.44,
-    Math.max(width, height) * 0.72,
-  );
-  gradient.addColorStop(0, "#0a1830");
-  gradient.addColorStop(0.48, "#050c1d");
-  gradient.addColorStop(1, "#02040c");
-  context.fillStyle = gradient;
-  context.fillRect(0, 0, width, height);
-
-  const random = createRandom(0x51a7f00d);
-  const stars = Math.min(180, Math.floor((width * height) / 18000));
-  for (let index = 0; index < stars; index += 1) {
-    const x = random() * width;
-    const y = random() * height;
-    const radius = 0.35 + random() * 0.8;
-    context.beginPath();
-    context.arc(x, y, radius, 0, Math.PI * 2);
-    context.fillStyle = `rgba(137, 190, 255, ${0.035 + random() * 0.1})`;
-    context.fill();
-  }
+  renderContext.fillStyle = "#02040b";
+  renderContext.fillRect(0, 0, width, height);
 }
 
 function trianglePath(context, boid, length) {
@@ -177,36 +136,16 @@ function boidColor(boid) {
   return `hsla(${hue.toFixed(1)}, ${palette.saturation}%, ${light.toFixed(1)}%, 0.92)`;
 }
 
-function render(context, deltaSeconds) {
-  const trail = clamp(config.trails, 0, 100) / 100;
-  const fade = trail >= 0.995 ? 1 : 0.08 + (1 - trail) ** 2 * 0.9;
+function render(context) {
   context.globalAlpha = 1;
-  context.fillStyle = `rgba(3, 7, 18, ${fade})`;
+  context.fillStyle = "#02040b";
   context.fillRect(0, 0, width, height);
 
   const size = clamp(Math.min(width, height) / 118, 5.2, 8.8);
-  context.lineJoin = "round";
-  context.shadowBlur = config.glow ? size * 0.9 : 0;
   for (const boid of flock.boids) {
-    const color = boidColor(boid);
-    context.shadowColor = color;
-    context.fillStyle = color;
+    context.fillStyle = boidColor(boid);
     trianglePath(context, boid, size);
     context.fill();
-  }
-  context.shadowBlur = 0;
-
-  for (const ripple of ripples) {
-    ripple.age += deltaSeconds;
-    const progress = clamp(ripple.age / 0.72, 0, 1);
-    context.beginPath();
-    context.arc(ripple.x, ripple.y, 14 + progress * 78, 0, Math.PI * 2);
-    context.strokeStyle = `rgba(118, 224, 255, ${(1 - progress) * 0.42})`;
-    context.lineWidth = 1.2;
-    context.stroke();
-  }
-  for (let index = ripples.length - 1; index >= 0; index -= 1) {
-    if (ripples[index].age >= 0.72) ripples.splice(index, 1);
   }
 }
 
@@ -241,7 +180,7 @@ function frame(now) {
     accumulator -= fixedStep;
     steps += 1;
   }
-  render(renderContext, elapsed);
+  render(renderContext);
   animationFrame = requestAnimationFrame(frame);
 }
 
@@ -257,7 +196,6 @@ function scatter() {
   if (!flock) return;
   if (pointer.active) flock.scatterAt(pointer.x, pointer.y, 280, 430);
   else flock.scatter(245);
-  ripples.push({ x: pointer.x, y: pointer.y, age: 0 });
 }
 
 function installInteractions() {

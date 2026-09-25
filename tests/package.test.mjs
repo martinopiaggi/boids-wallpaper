@@ -19,6 +19,8 @@ test("Lively package points to existing web runtime assets", async () => {
 
 test("Lively properties use supported controls", async () => {
   const properties = await json("LivelyProperties.json");
+  assert.equal(properties.trails, undefined);
+  assert.equal(properties.glow, undefined);
   const supported = new Set(["slider", "dropdown", "checkbox", "button"]);
   for (const [name, property] of Object.entries(properties)) {
     assert.ok(property.text, `${name} needs a label`);
