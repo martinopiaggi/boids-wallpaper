@@ -2,23 +2,17 @@ import { Flock, clamp, createRandom } from "./flock.js";
 
 const canvas = document.querySelector("#boids");
 const errorBox = document.querySelector("#error");
+const BACKGROUND = "#000";
+const FOREGROUND = "#fff";
 
 const defaults = Object.freeze({
   count: 128,
-  speed: 1.15,
-  palette: "aurora",
+  speed: 1.8,
   interaction: "orbit",
 });
 
 const config = { ...defaults };
 const pointer = { x: 0, y: 0, active: false, mode: config.interaction, lastMove: 0 };
-const palettes = Object.freeze({
-  aurora: { hue: 154, spread: 104, saturation: 92, light: 62 },
-  ice: { hue: 188, spread: 72, saturation: 82, light: 66 },
-  ember: { hue: 8, spread: 58, saturation: 91, light: 61 },
-  mono: { hue: 205, spread: 18, saturation: 18, light: 82 },
-});
-const paletteNames = Object.freeze(Object.keys(palettes));
 const interactionModes = Object.freeze(["orbit", "follow", "avoid", "ignore"]);
 
 let width = 1;
@@ -28,7 +22,6 @@ let pagePaused = document.hidden;
 let contextLost = false;
 let accumulator = 0;
 let lastFrame = performance.now();
-let lastPointerDown = 0;
 let animationFrame = null;
 let renderContext;
 let flock;
@@ -54,14 +47,6 @@ function normalizeDropdown(value, items, fallback) {
   return items.includes(name) ? name : fallback;
 }
 
-function normalizePalette(value) {
-  return normalizeDropdown(value, paletteNames, config.palette);
-}
-
-function normalizeInteraction(value) {
-  return normalizeDropdown(value, interactionModes, config.interaction);
-}
-
 function applyProperty(name, value) {
   switch (name) {
     case "count":
@@ -69,18 +54,12 @@ function applyProperty(name, value) {
       flock?.setCount(config.count);
       break;
     case "speed":
-      config.speed = clamp(parseNumber(value, config.speed), 0.25, 2.5);
+      config.speed = clamp(parseNumber(value, config.speed), 0.25, 4);
       flock?.setSpeed(config.speed);
       break;
-    case "palette":
-      config.palette = normalizePalette(value);
-      break;
     case "interaction":
-      config.interaction = normalizeInteraction(value);
+      config.interaction = normalizeDropdown(value, interactionModes, config.interaction);
       pointer.mode = config.interaction;
-      break;
-    case "scatter":
-      scatter();
       break;
     default:
       break;
@@ -106,47 +85,35 @@ function resize() {
   }
 
   renderContext.setTransform(ratio, 0, 0, ratio, 0, 0);
+  renderContext.imageSmoothingEnabled = false;
   flock?.resize(width, height);
-  renderContext.fillStyle = "#02040b";
+  renderContext.fillStyle = BACKGROUND;
   renderContext.fillRect(0, 0, width, height);
 }
 
-function trianglePath(context, boid, length) {
+function addTriangle(context, boid, length) {
   const angle = Math.atan2(boid.vy, boid.vx);
   const cosine = Math.cos(angle);
   const sine = Math.sin(angle);
-  const noseX = boid.x + cosine * length;
-  const noseY = boid.y + sine * length;
   const backX = boid.x - cosine * length * 0.58;
   const backY = boid.y - sine * length * 0.58;
   const halfWidth = length * 0.48;
-  context.beginPath();
-  context.moveTo(noseX, noseY);
+  context.moveTo(boid.x + cosine * length, boid.y + sine * length);
   context.lineTo(backX - sine * halfWidth, backY + cosine * halfWidth);
   context.lineTo(backX + sine * halfWidth, backY - cosine * halfWidth);
   context.closePath();
 }
 
-function boidColor(boid) {
-  const palette = palettes[config.palette] ?? palettes.aurora;
-  const speed = Math.hypot(boid.vx, boid.vy);
-  const speedMix = clamp((speed / Math.max(1, flock.maxSpeed) - 0.45) / 0.8, 0, 1);
-  const hue = (palette.hue + boid.phase * palette.spread + speedMix * 22 + 360) % 360;
-  const light = palette.light + speedMix * 5;
-  return `hsla(${hue.toFixed(1)}, ${palette.saturation}%, ${light.toFixed(1)}%, 0.92)`;
-}
-
 function render(context) {
-  context.globalAlpha = 1;
-  context.fillStyle = "#02040b";
+  context.fillStyle = BACKGROUND;
   context.fillRect(0, 0, width, height);
-
+  context.beginPath();
+  context.fillStyle = FOREGROUND;
   const size = clamp(Math.min(width, height) / 118, 5.2, 8.8);
-  for (const boid of flock.boids) {
-    context.fillStyle = boidColor(boid);
-    trianglePath(context, boid, size);
-    context.fill();
+  for (let index = 0; index < flock.boids.length; index += 1) {
+    addTriangle(context, flock.boids[index], size);
   }
+  context.fill();
 }
 
 function isRunning() {
@@ -192,32 +159,17 @@ function updatePointer(event) {
   pointer.lastMove = performance.now();
 }
 
-function scatter() {
-  if (!flock) return;
-  if (pointer.active) flock.scatterAt(pointer.x, pointer.y, 280, 430);
-  else flock.scatter(245);
-}
-
 function installInteractions() {
   canvas.addEventListener("pointermove", updatePointer, { passive: true });
   canvas.addEventListener("pointerenter", updatePointer, { passive: true });
   canvas.addEventListener("pointerleave", () => {
     pointer.active = false;
   });
-  canvas.addEventListener("pointerdown", event => {
-    const now = performance.now();
-    if (now - lastPointerDown < 90) return;
-    lastPointerDown = now;
-    updatePointer(event);
-    scatter();
-  });
   window.addEventListener("keydown", event => {
     if (event.repeat || event.ctrlKey || event.metaKey || event.altKey) return;
     if (event.code === "Space") {
       event.preventDefault();
       setHostPaused(!hostPaused);
-    } else if (event.key.toLowerCase() === "r") {
-      scatter();
     } else if (event.key.toLowerCase() === "f") {
       if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
       else document.documentElement.requestFullscreen().catch(() => {});
@@ -244,7 +196,6 @@ function installInteractions() {
 function exposeLivelyBridge() {
   window.boidsApplyProperty = applyProperty;
   window.boidsSetPaused = setHostPaused;
-  window.boidsScatter = scatter;
   for (const [name, value] of window.__boidsPendingProperties ?? []) applyProperty(name, value);
   window.__boidsPendingProperties?.clear();
   if (typeof window.__boidsPendingPaused === "boolean") {

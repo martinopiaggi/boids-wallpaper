@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import colorsys
 import math
 import random
 from pathlib import Path
@@ -10,8 +9,8 @@ from PIL import Image, ImageDraw
 ROOT = Path(__file__).resolve().parent.parent
 ASSETS = ROOT / "assets"
 TAU = math.tau
-MIN_SPEED = 53
-MAX_SPEED = 110
+MIN_SPEED = 83
+MAX_SPEED = 173
 
 
 class Point:
@@ -157,7 +156,7 @@ def step(flock: list[Point], width: int, height: int, delta_seconds: float) -> N
 
 
 def background(width: int, height: int) -> Image.Image:
-    return Image.new("RGB", (width, height), (2, 4, 11))
+    return Image.new("RGB", (width, height), (0, 0, 0))
 
 
 def triangle(boid: Point, size: float) -> list[tuple[float, float]]:
@@ -178,12 +177,8 @@ def triangle(boid: Point, size: float) -> list[tuple[float, float]]:
     ]
 
 
-def color_for(boid: Point) -> tuple[int, int, int, int]:
-    hue = (154 / 360 + boid.phase * 104 / 360) % 1
-    saturation = 0.92
-    lightness = 0.62
-    red, green, blue = colorsys.hls_to_rgb(hue, lightness, saturation)
-    return round(red * 255), round(green * 255), round(blue * 255), 255
+def color_for(_boid: Point) -> tuple[int, int, int]:
+    return 255, 255, 255
 
 
 def draw_frame(base: Image.Image, flock: list[Point]) -> Image.Image:

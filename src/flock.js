@@ -29,19 +29,32 @@ export function createRandom(seed = 1) {
   };
 }
 
-function cap(x, y, maximum) {
+function capInto(out, x, y, maximum) {
   const magnitude = Math.hypot(x, y);
-  if (magnitude <= maximum || magnitude === 0) return { x, y };
+  if (magnitude <= maximum || magnitude === 0) {
+    out.x = x;
+    out.y = y;
+    return out;
+  }
   const scale = maximum / magnitude;
-  return { x: x * scale, y: y * scale };
+  out.x = x * scale;
+  out.y = y * scale;
+  return out;
 }
 
-function steer(x, y, velocityX, velocityY, speed, force) {
+function steerInto(out, x, y, velocityX, velocityY, speed, force) {
   const magnitude = Math.hypot(x, y);
-  if (magnitude < 0.0001) return { x: 0, y: 0 };
-  const desiredX = (x / magnitude) * speed;
-  const desiredY = (y / magnitude) * speed;
-  return cap(desiredX - velocityX, desiredY - velocityY, force);
+  if (magnitude < 0.0001) {
+    out.x = 0;
+    out.y = 0;
+    return out;
+  }
+  return capInto(
+    out,
+    (x / magnitude) * speed - velocityX,
+    (y / magnitude) * speed - velocityY,
+    force,
+  );
 }
 
 export class Flock {
@@ -67,7 +80,7 @@ export class Flock {
     this.separationRadius = Math.max(1, separationRadius);
     this.baseMinSpeed = Math.max(0, minSpeed);
     this.baseMaxSpeed = Math.max(this.baseMinSpeed + 1, maxSpeed);
-    this.maxForce = Math.max(1, maxForce);
+    this.baseMaxForce = Math.max(1, maxForce);
     this.separationWeight = separationWeight;
     this.alignmentWeight = alignmentWeight;
     this.cohesionWeight = cohesionWeight;
@@ -77,6 +90,8 @@ export class Flock {
     this.columns = 1;
     this.rows = 1;
     this.cellSize = this.perception;
+    this.steerScratch = { x: 0, y: 0 };
+    this.pointerScratch = { x: 0, y: 0 };
     this.speed = 1;
     this.setSpeed(speed);
     this.setCount(count);
@@ -94,6 +109,10 @@ export class Flock {
     return this.baseMaxSpeed * this.speed;
   }
 
+  get maxForce() {
+    return this.baseMaxForce * this.speed;
+  }
+
   setSpeed(value) {
     this.speed = clamp(Number.isFinite(value) ? value : 1, 0.1, 4);
     return this.speed;
@@ -102,7 +121,8 @@ export class Flock {
   setCount(value) {
     const next = clamp(Math.round(Number(value) || 0), 0, 320);
     while (this.boids.length < next) this.boids.push(this.createBoid());
-    if (this.boids.length > next) this.boids.length = next;
+    while (this.accelerations.length < next) this.accelerations.push({ x: 0, y: 0 });
+    this.boids.length = next;
     this.accelerations.length = next;
     return this.count;
   }
@@ -142,13 +162,19 @@ export class Flock {
 
   updateGridGeometry() {
     const shortestSide = Math.min(this.width, this.height);
-    this.cellSize = Math.max(1, Math.min(this.perception, shortestSide / 4));
-    this.columns = Math.max(4, Math.ceil(this.width / this.cellSize));
-    this.rows = Math.max(4, Math.ceil(this.height / this.cellSize));
+    const cellSize = Math.max(1, Math.min(this.perception, shortestSide / 4));
+    const columns = Math.max(4, Math.ceil(this.width / cellSize));
+    const rows = Math.max(4, Math.ceil(this.height / cellSize));
+    if (cellSize !== this.cellSize || columns !== this.columns || rows !== this.rows) {
+      this.grid.clear();
+    }
+    this.cellSize = cellSize;
+    this.columns = columns;
+    this.rows = rows;
   }
 
   cellKey(x, y) {
-    return `${x},${y}`;
+    return x + y * this.columns;
   }
 
   positiveModulo(value, divisor) {
@@ -156,12 +182,13 @@ export class Flock {
   }
 
   rebuildGrid() {
-    this.grid.clear();
+    for (const cell of this.grid.values()) cell.length = 0;
     for (let index = 0; index < this.boids.length; index += 1) {
       const boid = this.boids[index];
-      const cellX = Math.floor(boid.x / this.cellSize);
-      const cellY = Math.floor(boid.y / this.cellSize);
-      const key = this.cellKey(cellX, cellY);
+      const key = this.cellKey(
+        Math.floor(boid.x / this.cellSize),
+        Math.floor(boid.y / this.cellSize),
+      );
       const cell = this.grid.get(key);
       if (cell) cell.push(index);
       else this.grid.set(key, [index]);
@@ -169,15 +196,19 @@ export class Flock {
   }
 
   pointerForce(boid, pointer) {
-    if (!pointer?.active || this.boids.length === 0) return { x: 0, y: 0 };
+    const out = this.pointerScratch;
+    out.x = 0;
+    out.y = 0;
+    if (!pointer?.active || this.boids.length === 0) return out;
     const mode = pointer.mode ?? "orbit";
-    if (mode === "ignore") return { x: 0, y: 0 };
+    if (mode === "ignore") return out;
 
-    let dx = wrappedDelta(boid.x, boid.y, pointer.x, pointer.y, this.width, this.height).x;
-    let dy = wrappedDelta(boid.x, boid.y, pointer.x, pointer.y, this.width, this.height).y;
+    const delta = wrappedDelta(boid.x, boid.y, pointer.x, pointer.y, this.width, this.height);
+    let dx = delta.x;
+    let dy = delta.y;
     let distance = Math.hypot(dx, dy);
     const radius = mode === "follow" ? 330 : 270;
-    if (distance >= radius) return { x: 0, y: 0 };
+    if (distance >= radius) return out;
     if (distance < 0.001) {
       const angle = boid.phase * TAU;
       dx = Math.cos(angle);
@@ -191,19 +222,20 @@ export class Flock {
     const force = this.maxForce * falloff;
 
     if (mode === "follow") {
-      return { x: radialX * force, y: radialY * force };
+      out.x = radialX * force;
+      out.y = radialY * force;
+      return out;
     }
     if (mode === "avoid") {
-      return { x: -radialX * force, y: -radialY * force };
+      out.x = -radialX * force;
+      out.y = -radialY * force;
+      return out;
     }
 
-    const tangentX = -radialY;
-    const tangentY = radialX;
     const ringError = clamp((distance - 135) / 135, -1, 1);
-    return {
-      x: tangentX * force * 0.72 - radialX * ringError * force * 0.3,
-      y: tangentY * force * 0.72 - radialY * ringError * force * 0.3,
-    };
+    out.x = -radialY * force * 0.72 - radialX * ringError * force * 0.3;
+    out.y = radialX * force * 0.72 - radialY * ringError * force * 0.3;
+    return out;
   }
 
   step(deltaSeconds, pointer = null) {
@@ -215,6 +247,10 @@ export class Flock {
     const perceptionSquared = this.cellSize * this.cellSize;
     const separationRadius = Math.min(this.separationRadius, this.cellSize * 0.48);
     const separationSquared = separationRadius * separationRadius;
+    const halfWidth = this.width / 2;
+    const halfHeight = this.height / 2;
+    const maxForce = this.maxForce;
+    const maxSpeed = this.maxSpeed;
 
     for (let index = 0; index < this.boids.length; index += 1) {
       const boid = this.boids[index];
@@ -231,25 +267,33 @@ export class Flock {
       for (let offsetY = -1; offsetY <= 1; offsetY += 1) {
         const cellY = this.positiveModulo(centerY + offsetY, this.rows);
         for (let offsetX = -1; offsetX <= 1; offsetX += 1) {
-          const cellX = this.positiveModulo(centerX + offsetX, this.columns);
-          const cell = this.grid.get(this.cellKey(cellX, cellY));
+          const cell = this.grid.get(this.cellKey(
+            this.positiveModulo(centerX + offsetX, this.columns),
+            cellY,
+          ));
           if (!cell) continue;
 
-          for (const neighborIndex of cell) {
+          for (let neighborSlot = 0; neighborSlot < cell.length; neighborSlot += 1) {
+            const neighborIndex = cell[neighborSlot];
             if (neighborIndex === index) continue;
             const neighbor = this.boids[neighborIndex];
-            const delta = wrappedDelta(boid.x, boid.y, neighbor.x, neighbor.y, this.width, this.height);
-            const distanceSquared = delta.x * delta.x + delta.y * delta.y;
+            let dx = neighbor.x - boid.x;
+            let dy = neighbor.y - boid.y;
+            if (dx > halfWidth) dx -= this.width;
+            else if (dx < -halfWidth) dx += this.width;
+            if (dy > halfHeight) dy -= this.height;
+            else if (dy < -halfHeight) dy += this.height;
+            const distanceSquared = dx * dx + dy * dy;
             if (distanceSquared > perceptionSquared) continue;
 
             neighbors += 1;
             alignmentX += neighbor.vx;
             alignmentY += neighbor.vy;
-            cohesionX += delta.x;
-            cohesionY += delta.y;
+            cohesionX += dx;
+            cohesionY += dy;
             if (distanceSquared < separationSquared && distanceSquared > 0.000001) {
-              separationX -= delta.x / distanceSquared;
-              separationY -= delta.y / distanceSquared;
+              separationX -= dx / distanceSquared;
+              separationY -= dy / distanceSquared;
             }
           }
         }
@@ -258,31 +302,34 @@ export class Flock {
       let accelerationX = 0;
       let accelerationY = 0;
       if (neighbors > 0) {
-        const separation = steer(
+        const steer = steerInto(
+          this.steerScratch,
           separationX,
           separationY,
           boid.vx,
           boid.vy,
-          this.maxSpeed,
-          this.maxForce,
+          maxSpeed,
+          maxForce,
         );
-        const alignment = cap(
+        accelerationX += steer.x * this.separationWeight;
+        accelerationY += steer.y * this.separationWeight;
+        const alignment = capInto(
+          this.steerScratch,
           (alignmentX / neighbors - boid.vx) * this.alignmentWeight,
           (alignmentY / neighbors - boid.vy) * this.alignmentWeight,
-          this.maxForce,
+          maxForce,
         );
-        const cohesion = steer(
+        accelerationX += alignment.x;
+        accelerationY += alignment.y;
+        const cohesion = steerInto(
+          this.steerScratch,
           cohesionX / neighbors,
           cohesionY / neighbors,
           boid.vx,
           boid.vy,
-          this.maxSpeed,
-          this.maxForce,
+          maxSpeed,
+          maxForce,
         );
-        accelerationX += separation.x * this.separationWeight;
-        accelerationY += separation.y * this.separationWeight;
-        accelerationX += alignment.x;
-        accelerationY += alignment.y;
         accelerationX += cohesion.x * this.cohesionWeight;
         accelerationY += cohesion.y * this.cohesionWeight;
       }
@@ -290,10 +337,15 @@ export class Flock {
       const pointerSteering = this.pointerForce(boid, pointer);
       accelerationX += pointerSteering.x;
       accelerationY += pointerSteering.y;
-      const acceleration = cap(accelerationX, accelerationY, this.maxForce * 1.8);
-      this.accelerations[index] = acceleration;
+      let acceleration = this.accelerations[index];
+      if (!acceleration) {
+        acceleration = { x: 0, y: 0 };
+        this.accelerations[index] = acceleration;
+      }
+      capInto(acceleration, accelerationX, accelerationY, maxForce * 1.8);
     }
 
+    const minSpeed = this.minSpeed;
     for (let index = 0; index < this.boids.length; index += 1) {
       const boid = this.boids[index];
       const acceleration = this.accelerations[index];
@@ -301,17 +353,16 @@ export class Flock {
       boid.vy += acceleration.y * dt;
 
       let speed = Math.hypot(boid.vx, boid.vy);
-      if (speed > this.maxSpeed) {
-        const scale = this.maxSpeed / speed;
+      if (speed > maxSpeed) {
+        const scale = maxSpeed / speed;
         boid.vx *= scale;
         boid.vy *= scale;
-        speed = this.maxSpeed;
-      } else if (speed < this.minSpeed) {
+      } else if (speed < minSpeed) {
         if (speed < 0.000001) {
-          boid.vx = Math.cos(boid.phase * TAU) * this.minSpeed;
-          boid.vy = Math.sin(boid.phase * TAU) * this.minSpeed;
+          boid.vx = Math.cos(boid.phase * TAU) * minSpeed;
+          boid.vy = Math.sin(boid.phase * TAU) * minSpeed;
         } else {
-          const scale = this.minSpeed / speed;
+          const scale = minSpeed / speed;
           boid.vx *= scale;
           boid.vy *= scale;
         }
@@ -319,34 +370,6 @@ export class Flock {
 
       boid.x = wrap(boid.x + boid.vx * dt, this.width);
       boid.y = wrap(boid.y + boid.vy * dt, this.height);
-    }
-  }
-
-  scatter(strength = 235) {
-    const amount = clamp(Number(strength) || 0, 0, 900);
-    for (const boid of this.boids) {
-      const angle = this.random() * TAU;
-      boid.vx += Math.cos(angle) * amount;
-      boid.vy += Math.sin(angle) * amount;
-      const speed = Math.hypot(boid.vx, boid.vy);
-      if (speed > this.maxSpeed * 1.35) {
-        const scale = (this.maxSpeed * 1.35) / speed;
-        boid.vx *= scale;
-        boid.vy *= scale;
-      }
-    }
-  }
-
-  scatterAt(x, y, radius = 250, strength = 390) {
-    const safeRadius = Math.max(1, radius);
-    for (const boid of this.boids) {
-      const delta = wrappedDelta(boid.x, boid.y, x, y, this.width, this.height);
-      const distance = Math.hypot(delta.x, delta.y);
-      if (distance >= safeRadius) continue;
-      const angle = this.random() * TAU;
-      const impulse = strength * (1 - distance / safeRadius);
-      boid.vx += Math.cos(angle) * impulse;
-      boid.vy += Math.sin(angle) * impulse;
     }
   }
 }

@@ -11,26 +11,15 @@
     "text": "Speed",
     "type": "slider",
     "min": 0.25,
-    "max": 2.5,
+    "max": 4,
     "step": 0.01,
     "tick": 10,
-    "value": 1.15
-  },
-  "palette": {
-    "text": "Palette",
-    "type": "dropdown",
-    "value": 0,
-    "items": ["Aurora", "Ice", "Ember", "Mono"]
+    "value": 1.8
   },
   "interaction": {
     "text": "Cursor",
     "type": "dropdown",
     "value": 0,
     "items": ["Orbit", "Follow", "Avoid", "Ignore"]
-  },
-  "scatter": {
-    "text": "Scatter flock",
-    "type": "button",
-    "value": "Scatter"
   }
 }

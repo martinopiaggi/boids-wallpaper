@@ -14,10 +14,8 @@ Open <http://127.0.0.1:4173>. The project has no install step or third-party pac
 
 ### Browser controls
 
-- Move the pointer to guide the flock around its cursor.
-- Click to scatter nearby boids.
+- Move the pointer to guide the flock. Clicks do not change it.
 - Press `Space` to pause or resume.
-- Press `R` to scatter the flock.
 - Press `F` for fullscreen.
 
 ## Install in Lively Wallpaper
@@ -27,17 +25,15 @@ Open <http://127.0.0.1:4173>. The project has no install step or third-party pac
 3. Select this repository folder.
 4. Select **Boids** and apply it to a display.
 
-The root `LivelyInfo.json` and `LivelyProperties.json` provide the thumbnail, preview, playback integration, and controls for flock size, speed, palette, and cursor behavior. Rendering is deliberately flat: there are no glows, blur, trails, or click effects. Lively can pause the simulation when playback is disabled or the wallpaper is not visible.
+The root `LivelyInfo.json` and `LivelyProperties.json` provide the thumbnail, preview, playback integration, and controls for flock size, speed, and cursor behavior. Triangles are exactly white on exactly black. Pointer movement steers the flock, while clicks have no effect. Lively can pause the simulation when playback is disabled or the wallpaper is not visible.
 
 ## Controls in Lively
 
 | Property | Values | Default |
 | --- | --- | --- |
 | Flock size | 20–280 | 128 |
-| Speed | 0.25–2.5× | 1.15× |
-| Palette | Aurora, Ice, Ember, Mono | Aurora |
+| Speed | 0.25–4× | 1.8× |
 | Cursor | Orbit, Follow, Avoid, Ignore | Orbit |
-| Scatter flock | Action button | — |
 
 ## Development
 
