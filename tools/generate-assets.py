@@ -9,8 +9,8 @@ from PIL import Image, ImageDraw
 ROOT = Path(__file__).resolve().parent.parent
 ASSETS = ROOT / "assets"
 TAU = math.tau
-MIN_SPEED = 83
-MAX_SPEED = 173
+MIN_SPEED = 124
+MAX_SPEED = 259
 
 
 class Point:
@@ -193,14 +193,14 @@ def draw_frame(base: Image.Image, flock: list[Point]) -> Image.Image:
 def write_assets() -> None:
     ASSETS.mkdir(parents=True, exist_ok=True)
     thumbnail_base = background(640, 360)
-    thumbnail_flock = make_flock(640, 360, 145, 0xB01D5)
+    thumbnail_flock = make_flock(640, 360, 290, 0xB01D5)
     for _ in range(180):
         step(thumbnail_flock, 640, 360, 1 / 60)
     draw_frame(thumbnail_base, thumbnail_flock).save(ASSETS / "thumbnail.png", optimize=True)
 
     width, height = 320, 180
     preview_base = background(width, height)
-    preview_flock = make_flock(width, height, 72, 0xB01D5)
+    preview_flock = make_flock(width, height, 144, 0xB01D5)
     for _ in range(120):
         step(preview_flock, width, height, 1 / 60)
     frames = []

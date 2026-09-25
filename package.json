@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node scripts/serve.mjs",
     "test": "node --test",
-    "check": "node --check src/flock.js && node --check src/main.js && node --check scripts/serve.mjs && node --test"
+    "check": "node --check src/flock.js && node --check src/webgpu.js && node --check src/main.js && node --check scripts/serve.mjs && node --test"
   },
   "engines": {
     "node": ">=18"

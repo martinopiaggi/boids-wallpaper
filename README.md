@@ -25,14 +25,14 @@ Open <http://127.0.0.1:4173>. The project has no install step or third-party pac
 3. Select this repository folder.
 4. Select **Boids** and apply it to a display.
 
-The root `LivelyInfo.json` and `LivelyProperties.json` provide the thumbnail, preview, playback integration, and controls for flock size, speed, and cursor behavior. Triangles are exactly white on exactly black. Pointer movement steers the flock, while clicks have no effect. Lively can pause the simulation when playback is disabled or the wallpaper is not visible.
+The root `LivelyInfo.json` and `LivelyProperties.json` provide the thumbnail, preview, playback integration, and controls for flock size, speed, and cursor behavior. Triangles are exactly white on exactly black. Pointer movement steers the flock, while clicks have no effect. The simulation runs at 120 Hz and drawing is capped at 120 fps. WebGPU runs both the flocking rules and the triangle drawing on the graphics card; Canvas 2D is the automatic fallback. Lively can pause the simulation when playback is disabled or the wallpaper is not visible.
 
 ## Controls in Lively
 
 | Property | Values | Default |
 | --- | --- | --- |
-| Flock size | 20–280 | 128 |
-| Speed | 0.25–4× | 1.8× |
+| Flock size | 20–1024 | 256 |
+| Speed | 0.25–4× | 2.7× |
 | Cursor | Orbit, Follow, Avoid, Ignore | Orbit |
 
 ## Development
@@ -42,7 +42,7 @@ npm test
 npm run check
 ```
 
-The simulation is in [`src/flock.js`](src/flock.js), while [`src/main.js`](src/main.js) handles Canvas rendering, fixed-step animation, resizing, pointer input, and Lively playback/property hooks. A spatial hash limits neighbor checks to the nine nearby cells; the simulation still wraps every boundary so the flock never clusters at an edge.
+The CPU simulation is in [`src/flock.js`](src/flock.js). [`src/webgpu.js`](src/webgpu.js) runs the same rules in a WGSL compute shader and draws one instanced triangle per boid, with the state kept on the GPU. [`src/main.js`](src/main.js) selects that path when WebGPU is available and otherwise uses Canvas 2D. A spatial hash limits the CPU fallback to nine nearby cells. On a slower display, physics still advances at 120 Hz and the browser presents the latest frame at the monitor rate.
 
 Regenerate the committed preview assets with Python and Pillow:
 

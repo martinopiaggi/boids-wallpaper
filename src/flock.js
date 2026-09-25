@@ -119,7 +119,7 @@ export class Flock {
   }
 
   setCount(value) {
-    const next = clamp(Math.round(Number(value) || 0), 0, 320);
+    const next = clamp(Math.round(Number(value) || 0), 0, 1024);
     while (this.boids.length < next) this.boids.push(this.createBoid());
     while (this.accelerations.length < next) this.accelerations.push({ x: 0, y: 0 });
     this.boids.length = next;
@@ -134,12 +134,16 @@ export class Flock {
 
   createBoid() {
     const angle = this.random() * TAU;
+    const cosine = Math.cos(angle);
+    const sine = Math.sin(angle);
     const speed = this.minSpeed + this.random() * (this.maxSpeed - this.minSpeed);
     return {
       x: this.random() * this.width,
       y: this.random() * this.height,
-      vx: Math.cos(angle) * speed,
-      vy: Math.sin(angle) * speed,
+      vx: cosine * speed,
+      vy: sine * speed,
+      fx: cosine,
+      fy: sine,
       phase: this.random(),
     };
   }
@@ -203,9 +207,14 @@ export class Flock {
     const mode = pointer.mode ?? "orbit";
     if (mode === "ignore") return out;
 
-    const delta = wrappedDelta(boid.x, boid.y, pointer.x, pointer.y, this.width, this.height);
-    let dx = delta.x;
-    let dy = delta.y;
+    let dx = pointer.x - boid.x;
+    let dy = pointer.y - boid.y;
+    const halfWidth = this.width / 2;
+    const halfHeight = this.height / 2;
+    if (dx > halfWidth) dx -= this.width;
+    else if (dx < -halfWidth) dx += this.width;
+    if (dy > halfHeight) dy -= this.height;
+    else if (dy < -halfHeight) dy += this.height;
     let distance = Math.hypot(dx, dy);
     const radius = mode === "follow" ? 330 : 270;
     if (distance >= radius) return out;
@@ -357,6 +366,7 @@ export class Flock {
         const scale = maxSpeed / speed;
         boid.vx *= scale;
         boid.vy *= scale;
+        speed = maxSpeed;
       } else if (speed < minSpeed) {
         if (speed < 0.000001) {
           boid.vx = Math.cos(boid.phase * TAU) * minSpeed;
@@ -366,7 +376,11 @@ export class Flock {
           boid.vx *= scale;
           boid.vy *= scale;
         }
+        speed = minSpeed;
       }
+      const inverseSpeed = 1 / speed;
+      boid.fx = boid.vx * inverseSpeed;
+      boid.fy = boid.vy * inverseSpeed;
 
       boid.x = wrap(boid.x + boid.vx * dt, this.width);
       boid.y = wrap(boid.y + boid.vy * dt, this.height);

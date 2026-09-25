@@ -23,7 +23,9 @@ test("Lively properties use supported controls", async () => {
   assert.equal(properties.glow, undefined);
   assert.equal(properties.palette, undefined);
   assert.equal(properties.scatter, undefined);
-  assert.equal(properties.speed.value, 1.8);
+  assert.equal(properties.speed.value, 2.7);
+  assert.equal(properties.count.value, 256);
+  assert.equal(properties.count.max, 1024);
   const supported = new Set(["slider", "dropdown", "checkbox", "button"]);
   for (const [name, property] of Object.entries(properties)) {
     assert.ok(property.text, `${name} needs a label`);

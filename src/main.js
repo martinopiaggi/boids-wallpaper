@@ -1,13 +1,18 @@
 import { Flock, clamp, createRandom } from "./flock.js";
+import { GPU_CAPACITY, createGpuFlock } from "./webgpu.js";
 
 const canvas = document.querySelector("#boids");
 const errorBox = document.querySelector("#error");
 const BACKGROUND = "#000";
 const FOREGROUND = "#fff";
 
+const TARGET_FPS = 120;
+const FIXED_STEP = 1 / TARGET_FPS;
+const FRAME_MS = 1000 / TARGET_FPS;
+
 const defaults = Object.freeze({
-  count: 128,
-  speed: 1.8,
+  count: 256,
+  speed: 2.7,
   interaction: "orbit",
 });
 
@@ -22,9 +27,14 @@ let pagePaused = document.hidden;
 let contextLost = false;
 let accumulator = 0;
 let lastFrame = performance.now();
+let nextFrameAt = 0;
+let triangleSize = 6;
 let animationFrame = null;
+let frameTimer = null;
 let renderContext;
 let flock;
+let gpu;
+let backend = "none";
 
 function showError(error) {
   console.error(error);
@@ -50,16 +60,19 @@ function normalizeDropdown(value, items, fallback) {
 function applyProperty(name, value) {
   switch (name) {
     case "count":
-      config.count = clamp(Math.round(parseNumber(value, config.count)), 20, 280);
+      config.count = clamp(Math.round(parseNumber(value, config.count)), 20, GPU_CAPACITY);
+      gpu?.setCount(config.count);
       flock?.setCount(config.count);
       break;
     case "speed":
       config.speed = clamp(parseNumber(value, config.speed), 0.25, 4);
+      gpu?.setSpeed(config.speed);
       flock?.setSpeed(config.speed);
       break;
     case "interaction":
       config.interaction = normalizeDropdown(value, interactionModes, config.interaction);
       pointer.mode = config.interaction;
+      gpu?.setMode(config.interaction);
       break;
     default:
       break;
@@ -84,71 +97,107 @@ function resize() {
     canvas.height = renderHeight;
   }
 
+  triangleSize = clamp(Math.min(width, height) / 118, 5.2, 8.8);
+  if (backend === "webgpu") {
+    gpu.resize(width, height);
+    return;
+  }
+  if (!renderContext) return;
   renderContext.setTransform(ratio, 0, 0, ratio, 0, 0);
   renderContext.imageSmoothingEnabled = false;
   flock?.resize(width, height);
-  renderContext.fillStyle = BACKGROUND;
-  renderContext.fillRect(0, 0, width, height);
-}
-
-function addTriangle(context, boid, length) {
-  const angle = Math.atan2(boid.vy, boid.vx);
-  const cosine = Math.cos(angle);
-  const sine = Math.sin(angle);
-  const backX = boid.x - cosine * length * 0.58;
-  const backY = boid.y - sine * length * 0.58;
-  const halfWidth = length * 0.48;
-  context.moveTo(boid.x + cosine * length, boid.y + sine * length);
-  context.lineTo(backX - sine * halfWidth, backY + cosine * halfWidth);
-  context.lineTo(backX + sine * halfWidth, backY - cosine * halfWidth);
-  context.closePath();
+  renderContext.clearRect(0, 0, width, height);
 }
 
 function render(context) {
-  context.fillStyle = BACKGROUND;
-  context.fillRect(0, 0, width, height);
+  context.clearRect(0, 0, width, height);
   context.beginPath();
   context.fillStyle = FOREGROUND;
-  const size = clamp(Math.min(width, height) / 118, 5.2, 8.8);
-  for (let index = 0; index < flock.boids.length; index += 1) {
-    addTriangle(context, flock.boids[index], size);
+  const length = triangleSize;
+  const backScale = length * 0.58;
+  const halfWidth = length * 0.48;
+  const boids = flock.boids;
+  for (let index = 0; index < boids.length; index += 1) {
+    const boid = boids[index];
+    const cosine = boid.fx;
+    const sine = boid.fy;
+    const backX = boid.x - cosine * backScale;
+    const backY = boid.y - sine * backScale;
+    const offsetX = sine * halfWidth;
+    const offsetY = cosine * halfWidth;
+    context.moveTo(boid.x + cosine * length, boid.y + sine * length);
+    context.lineTo(backX - offsetX, backY + offsetY);
+    context.lineTo(backX + offsetX, backY - offsetY);
+    context.closePath();
   }
   context.fill();
 }
 
 function isRunning() {
-  return Boolean(flock && !hostPaused && !pagePaused && !contextLost && !document.hidden);
+  return backend !== "none" && !hostPaused && !pagePaused && !contextLost && !document.hidden;
+}
+
+function stopLoop() {
+  accumulator = 0;
+  if (animationFrame !== null) cancelAnimationFrame(animationFrame);
+  if (frameTimer !== null) clearTimeout(frameTimer);
+  animationFrame = null;
+  frameTimer = null;
+}
+
+function scheduleFrame() {
+  if (!isRunning() || animationFrame !== null || frameTimer !== null) return;
+  const wait = nextFrameAt - performance.now() - 3;
+  if (wait > 4) {
+    frameTimer = setTimeout(() => {
+      frameTimer = null;
+      animationFrame = requestAnimationFrame(frame);
+    }, wait);
+  } else {
+    animationFrame = requestAnimationFrame(frame);
+  }
 }
 
 function synchronizeLoop() {
   if (!isRunning()) {
-    accumulator = 0;
-    if (animationFrame !== null) cancelAnimationFrame(animationFrame);
-    animationFrame = null;
+    stopLoop();
     return;
   }
-  if (animationFrame === null) {
+  if (animationFrame === null && frameTimer === null) {
     lastFrame = performance.now();
-    animationFrame = requestAnimationFrame(frame);
+    nextFrameAt = lastFrame;
+    scheduleFrame();
   }
 }
 
 function frame(now) {
   animationFrame = null;
   if (!isRunning()) return;
+  if (now + 0.5 < nextFrameAt) {
+    scheduleFrame();
+    return;
+  }
+
+  if (gpu?.lost) {
+    contextLost = true;
+    stopLoop();
+    return;
+  }
   const elapsed = Math.min(0.1, Math.max(0, (now - lastFrame) / 1000));
   lastFrame = now;
+  if (now - pointer.lastMove > 2400) pointer.active = false;
   accumulator = Math.min(accumulator + elapsed, 0.1);
-  const fixedStep = 1 / 60;
   let steps = 0;
-  while (accumulator >= fixedStep && steps < 4) {
-    if (performance.now() - pointer.lastMove > 2400) pointer.active = false;
-    flock.step(fixedStep, pointer);
-    accumulator -= fixedStep;
+  while (accumulator >= FIXED_STEP && steps < 8) {
+    if (backend !== "webgpu") flock.step(FIXED_STEP, pointer);
+    accumulator -= FIXED_STEP;
     steps += 1;
   }
-  render(renderContext);
-  animationFrame = requestAnimationFrame(frame);
+  if (backend === "webgpu") gpu.tick(steps, FIXED_STEP, pointer);
+  else render(renderContext);
+  nextFrameAt += FRAME_MS;
+  if (nextFrameAt <= now + 0.5) nextFrameAt = now + FRAME_MS;
+  scheduleFrame();
 }
 
 function updatePointer(event) {
@@ -203,25 +252,41 @@ function exposeLivelyBridge() {
   }
 }
 
-function start() {
-  renderContext = canvas.getContext("2d", { alpha: false, desynchronized: true });
-  if (!renderContext) throw new Error("Canvas 2D is unavailable");
-  flock = new Flock({
-    width,
-    height,
-    count: config.count,
-    speed: config.speed,
-    random: createRandom(0xb01d5),
-  });
+async function start() {
   installInteractions();
-  resize();
   exposeLivelyBridge();
+  const rect = canvas.getBoundingClientRect();
+  width = Math.max(1, rect.width);
+  height = Math.max(1, rect.height);
+  try {
+    gpu = await createGpuFlock(canvas, {
+      width,
+      height,
+      count: config.count,
+      speed: config.speed,
+      random: createRandom(0xb01d5),
+    });
+    gpu.setMode(config.interaction);
+    backend = "webgpu";
+  } catch (error) {
+    console.warn(error);
+    gpu = null;
+    renderContext = canvas.getContext("2d", { alpha: false, desynchronized: true });
+    if (!renderContext) throw new Error("Neither WebGPU nor Canvas 2D is available");
+    flock = new Flock({
+      width,
+      height,
+      count: config.count,
+      speed: config.speed,
+      random: createRandom(0xb01d5),
+    });
+    backend = "canvas";
+  }
+  resize();
   synchronizeLoop();
 }
 
-try {
-  start();
-} catch (error) {
+start().catch(error => {
   showError(error);
-  if (animationFrame !== null) cancelAnimationFrame(animationFrame);
-}
+  stopLoop();
+});
