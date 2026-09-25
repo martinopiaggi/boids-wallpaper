@@ -1,0 +1,49 @@
+{
+  "count": {
+    "text": "Flock size",
+    "type": "slider",
+    "min": 20,
+    "max": 280,
+    "tick": 10,
+    "value": 128
+  },
+  "speed": {
+    "text": "Speed",
+    "type": "slider",
+    "min": 0.25,
+    "max": 2.5,
+    "step": 0.01,
+    "tick": 10,
+    "value": 1
+  },
+  "trails": {
+    "text": "Trails",
+    "type": "slider",
+    "min": 0,
+    "max": 100,
+    "tick": 10,
+    "value": 56
+  },
+  "palette": {
+    "text": "Palette",
+    "type": "dropdown",
+    "value": 0,
+    "items": ["Aurora", "Ice", "Ember", "Mono"]
+  },
+  "glow": {
+    "text": "Soft glow",
+    "type": "checkbox",
+    "value": true
+  },
+  "interaction": {
+    "text": "Cursor",
+    "type": "dropdown",
+    "value": 0,
+    "items": ["Orbit", "Follow", "Avoid", "Ignore"]
+  },
+  "scatter": {
+    "text": "Scatter flock",
+    "type": "button",
+    "value": "Scatter"
+  }
+}

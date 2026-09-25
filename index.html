@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#030712" />
+    <meta name="description" content="A classic 2D boids flocking simulation built as a responsive live wallpaper." />
+    <title>Boids — live flocking wallpaper</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="styles.css" />
+    <script>
+      (() => {
+        const pending = new Map();
+        window.__boidsPendingProperties = pending;
+        window.__boidsPendingPaused = null;
+
+        window.livelyPropertyListener = (name, value) => {
+          if (typeof window.boidsApplyProperty === "function") {
+            window.boidsApplyProperty(name, value);
+          } else {
+            pending.set(name, value);
+          }
+        };
+
+        window.livelyWallpaperPlaybackChanged = data => {
+          let paused = false;
+          try {
+            const payload = typeof data === "string" ? JSON.parse(data) : data;
+            paused = Boolean(payload && (payload.IsPaused ?? payload.isPaused));
+          } catch {}
+          if (typeof window.boidsSetPaused === "function") window.boidsSetPaused(paused);
+          else window.__boidsPendingPaused = paused;
+        };
+      })();
+    </script>
+  </head>
+  <body>
+    <main id="wallpaper" aria-label="Boids live wallpaper">
+      <canvas id="boids" role="img" aria-label="Animated triangles flocking across a dark blue field">
+        Your browser needs Canvas support to display the boids simulation.
+      </canvas>
+      <p id="error" role="alert" hidden></p>
+    </main>
+    <noscript>This live wallpaper requires JavaScript.</noscript>
+    <script type="module" src="src/main.js"></script>
+  </body>
+</html>

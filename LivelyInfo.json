@@ -1,0 +1,14 @@
+{
+  "AppVersion": "2.2.1.0",
+  "Title": "Boids",
+  "Thumbnail": "assets/thumbnail.png",
+  "Preview": "assets/preview.gif",
+  "Desc": "Classic triangle boids flocking simulation with interactive, luminous trails.",
+  "Author": "martinopiaggi",
+  "License": "MIT",
+  "Contact": "https://github.com/martinopiaggi/boids-wallpaper",
+  "Type": 1,
+  "FileName": "index.html",
+  "Arguments": "--pause-event true",
+  "IsAbsolutePath": false
+}

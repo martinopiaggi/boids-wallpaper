@@ -1,0 +1,15 @@
+{
+  "name": "boids-wallpaper",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A classic 2D boids simulation packaged as a Lively Wallpaper.",
+  "type": "module",
+  "scripts": {
+    "start": "node scripts/serve.mjs",
+    "test": "node --test",
+    "check": "node --check src/flock.js && node --check src/main.js && node --check scripts/serve.mjs && node --test"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
