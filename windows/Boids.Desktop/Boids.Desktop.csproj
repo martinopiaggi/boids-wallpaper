@@ -1,7 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <!-- Plain net8.0-windows: nothing here uses the WinRT projection, so the 25 MB Microsoft.Windows.SDK.NET.dll is dead weight. -->
+    <TargetFramework>net8.0-windows</TargetFramework>
     <UseWindowsForms>true</UseWindowsForms>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -10,6 +11,18 @@
     <Version>2.0.0</Version>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
     <PublishTrimmed>false</PublishTrimmed>
+    <!-- Symbols live inside the assembly, so a publish leaves only the exe and wallpaper\ behind. -->
+    <DebugType>embedded</DebugType>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <PublishSingleFile Condition="'$(RuntimeIdentifier)' != ''">true</PublishSingleFile>
+    <EnableCompressionInSingleFile Condition="'$(SelfContained)' == 'true'">true</EnableCompressionInSingleFile>
+    <!-- WebView2Loader.dll is native and must be extracted next to the running app. -->
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <PruneUnusedWpfAssemblies>true</PruneUnusedWpfAssemblies>
+    <!-- Assemblies the SDK marks Profile="WPF" in Microsoft.WindowsDesktop.App's FrameworkList.xml.
+         The WindowsForms framework reference pulls them in, nothing in this app references them.
+         Set PruneUnusedWpfAssemblies=false to publish them unsupported-but-complete. -->
+    <UnusedWpfAssemblies>;PresentationCore;PresentationFramework;PresentationFramework.Aero;PresentationFramework.Aero2;PresentationFramework.AeroLite;PresentationFramework.Classic;PresentationFramework.Luna;PresentationFramework.Royale;PresentationUI;ReachFramework;System.Printing;System.Windows.Controls.Ribbon;System.Windows.Input.Manipulations;System.Windows.Presentation;System.Xaml;UIAutomationClient;UIAutomationClientSideProviders;UIAutomationProvider;UIAutomationTypes;WindowsBase;</UnusedWpfAssemblies>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4191.47" />
@@ -27,6 +40,17 @@
   <Target Name="RemoveUnusedWpfReference" BeforeTargets="ResolveAssemblyReferences">
     <ItemGroup>
       <Reference Remove="@(Reference)" Condition="'%(Reference.Filename)' == 'Microsoft.Web.WebView2.Wpf'" />
+    </ItemGroup>
+  </Target>
+  <Target Name="PruneUnusedWpfAssemblies" AfterTargets="ComputeResolvedFilesToPublishList" Condition="'$(PruneUnusedWpfAssemblies)' == 'true'">
+    <ItemGroup>
+      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)" Condition="'%(Extension)' == '.xml' or $(UnusedWpfAssemblies.Contains(';%(Filename);'))" />
+    </ItemGroup>
+  </Target>
+  <!-- Runtime pack assets are resolved lazily, so the published .deps.json is only honest if they are pruned after ResolveRuntimePackAssets. -->
+  <Target Name="PruneUnusedWpfRuntimePackAssets" AfterTargets="ResolveRuntimePackAssets" Condition="'$(PruneUnusedWpfAssemblies)' == 'true'">
+    <ItemGroup>
+      <RuntimePackAsset Remove="@(RuntimePackAsset)" Condition="$(UnusedWpfAssemblies.Contains(';%(Filename);'))" />
     </ItemGroup>
   </Target>
 </Project>

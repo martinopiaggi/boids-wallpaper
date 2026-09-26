@@ -26,7 +26,29 @@ Open <http://127.0.0.1:4173>. The project has no install step or third-party pac
 dotnet publish windows/Boids.Desktop/Boids.Desktop.csproj -c Release -r win-x64 --self-contained true -o dist/BoidsWallpaper-win-x64
 ```
 
-For a PC without the WebView2 Evergreen Runtime, copy a fixed-version runtime into `dist/BoidsWallpaper-win-x64/runtime` so `msedgewebview2.exe` is directly inside it. `scripts/package-windows.ps1` does both steps and writes `dist/BoidsWallpaper-win-x64.zip`. Settings are stored in `%LOCALAPPDATA%\BoidsWallpaper\settings.json`; the original desktop wallpaper is never modified.
+If `dotnet --list-sdks` prints "No SDKs were found", the command is hitting a runtime-only host (a `dotnet.exe` from a runtime/app install). Point it at the SDK host instead, for example:
+
+```powershell
+& "$env:USERPROFILE\.dotnet\dotnet.exe" publish windows/Boids.Desktop/Boids.Desktop.csproj -c Release -r win-x64 --self-contained true -o dist/BoidsWallpaper-win-x64
+```
+
+`scripts/package-windows.ps1` resolves a working SDK itself (`-Sdk <path>` overrides it), clears stale files from the output folder, and fails with an actionable message when no SDK is installed.
+
+The publish is a single compressed `BoidsWallpaper.exe` (≈48 MB) plus `wallpaper\`. `dotnet publish` never removes files that an earlier publish left behind, so clear the output folder when switching between layouts; the script does that for you.
+
+### Size
+
+The app talks to the WebView2 runtime; the exact build only decides where that runtime comes from.
+
+| Configuration | On disk |
+| --- | --- |
+| Bundled fixed-version WebView2 runtime (`runtime\`) | ≈850 MB |
+| Evergreen WebView2 runtime, single-file app | ≈48 MB |
+| Evergreen WebView2 runtime, app relies on the installed .NET 8 Desktop Runtime (`--no-self-contained -r win-x64`) | ≈1.3 MB |
+
+Pick the first row only when the target PC has neither the Evergreen runtime nor a way to get it: Windows 11 and current Windows 10 installs ship it through Edge. To build that offline variant, extract a fixed-version CAB into the package with `scripts/package-windows.ps1 -RuntimeCab <path-to-cab>`; `dist\webview2-offline-runtime` holds a previously extracted copy and can be dropped back in with `xcopy /e /i /y dist\webview2-offline-runtime dist\BoidsWallpaper-win-x64\runtime`. The host prefers `runtime\msedgewebview2.exe` when it is there and otherwise uses the installed Evergreen runtime.
+
+Settings are stored in `%LOCALAPPDATA%\BoidsWallpaper\settings.json`; the original desktop wallpaper is never modified.
 
 ## Install in Lively Wallpaper
 
