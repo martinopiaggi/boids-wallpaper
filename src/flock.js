@@ -29,6 +29,14 @@ export function createRandom(seed = 1) {
   };
 }
 
+// Cheap low-frequency field: drifting bands + per-boid offset in [-1.25, 1.25].
+// Bands in phase align into filaments, bands out of phase scatter -> interlocking
+// stripes instead of one uniform blob.
+export function chaosFactor(x, y, phase, time) {
+  const band = Math.sin(x * 0.0045 + time * 0.6) * Math.sin(y * 0.0052 - time * 0.43);
+  return band * 0.7 + (phase * 2 - 1) * 0.45;
+}
+
 function capInto(out, x, y, maximum) {
   const magnitude = Math.hypot(x, y);
   if (magnitude <= maximum || magnitude === 0) {
@@ -93,6 +101,7 @@ export class Flock {
     this.steerScratch = { x: 0, y: 0 };
     this.pointerScratch = { x: 0, y: 0 };
     this.speed = 1;
+    this.time = 0;
     this.setSpeed(speed);
     this.setCount(count);
   }
@@ -251,6 +260,8 @@ export class Flock {
   step(deltaSeconds, pointer = null) {
     const dt = clamp(Number.isFinite(deltaSeconds) ? deltaSeconds : 0, 0, 0.05);
     if (dt === 0 || this.boids.length === 0) return;
+    this.time += dt;
+    const time = this.time;
     this.updateGridGeometry();
     this.rebuildGrid();
 
@@ -321,16 +332,19 @@ export class Flock {
           maxSpeed,
           maxForce,
         );
-        accelerationX += steer.x * this.separationWeight;
-        accelerationY += steer.y * this.separationWeight;
+        const chaos = chaosFactor(boid.x, boid.y, boid.phase, time);
+        accelerationX += steer.x * this.separationWeight * (1 + chaos * 0.2);
+        accelerationY += steer.y * this.separationWeight * (1 + chaos * 0.2);
+        const alignmentWeight = this.alignmentWeight * (1 - chaos * 0.5);
         const alignment = capInto(
           this.steerScratch,
-          (alignmentX / neighbors - boid.vx) * this.alignmentWeight,
-          (alignmentY / neighbors - boid.vy) * this.alignmentWeight,
+          (alignmentX / neighbors - boid.vx) * alignmentWeight,
+          (alignmentY / neighbors - boid.vy) * alignmentWeight,
           maxForce,
         );
         accelerationX += alignment.x;
         accelerationY += alignment.y;
+        const cohesionWeight = this.cohesionWeight * (1 + chaos * 1.2);
         const cohesion = steerInto(
           this.steerScratch,
           cohesionX / neighbors,
@@ -340,8 +354,8 @@ export class Flock {
           maxSpeed,
           maxForce,
         );
-        accelerationX += cohesion.x * this.cohesionWeight;
-        accelerationY += cohesion.y * this.cohesionWeight;
+        accelerationX += cohesion.x * cohesionWeight;
+        accelerationY += cohesion.y * cohesionWeight;
       }
 
       const pointerSteering = this.pointerForce(boid, pointer);

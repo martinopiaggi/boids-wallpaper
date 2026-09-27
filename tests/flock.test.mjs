@@ -106,3 +106,18 @@ test("count changes are deterministic with a seeded generator", () => {
   assert.equal(first.setCount(40), 40);
   assert.equal(first.setCount(12), 12);
 });
+
+test("chaos field stays bounded and varies across the world", async () => {
+  const { chaosFactor } = await import("../src/flock.js");
+  let min = Infinity;
+  let max = -Infinity;
+  for (let x = 0; x < 4000; x += 137) {
+    for (let y = 0; y < 3000; y += 131) {
+      const value = chaosFactor(x, y, (x % 97) / 97, x * 0.01);
+      min = Math.min(min, value);
+      max = Math.max(max, value);
+    }
+  }
+  assert.ok(min >= -1.15 && max <= 1.15, `out of range: ${min}..${max}`);
+  assert.ok(max - min > 1, "field is too uniform to break up the flock");
+});

@@ -30,7 +30,7 @@ struct Sim {
   pointer_active: f32,
   pointer_mode: f32,
   triangle_size: f32,
-  padding0: f32,
+  time: f32,
   padding1: f32,
 }
 
@@ -58,6 +58,11 @@ fn steer(direction: vec2<f32>, velocity: vec2<f32>, speed: f32, force: f32) -> v
   let magnitude = length(direction);
   if (magnitude < 0.0001) { return vec2<f32>(0.0); }
   return limit(direction / magnitude * speed - velocity, force);
+}
+
+fn chaos_factor(position: vec2<f32>, phase: f32) -> f32 {
+  let band = sin(position.x * 0.0045 + sim.time * 0.6) * sin(position.y * 0.0052 - sim.time * 0.43);
+  return band * 0.7 + (phase * 2.0 - 1.0) * 0.45;
 }
 
 fn pointer_force(position: vec2<f32>, phase: f32) -> vec2<f32> {
@@ -118,9 +123,10 @@ fn simulate(@builtin(global_invocation_id) id: vec3<u32>) {
 
   var acceleration = vec2<f32>(0.0);
   if (neighbors > 0.0) {
-    acceleration += steer(separation, boid.velocity, sim.max_speed, sim.max_force) * 1.55;
-    acceleration += limit((alignment / neighbors - boid.velocity) * 1.05, sim.max_force);
-    acceleration += steer(cohesion / neighbors, boid.velocity, sim.max_speed, sim.max_force) * 0.78;
+    let chaos = chaos_factor(boid.position, boid.phase);
+    acceleration += steer(separation, boid.velocity, sim.max_speed, sim.max_force) * 1.55 * (1.0 + chaos * 0.2);
+    acceleration += limit((alignment / neighbors - boid.velocity) * 1.05 * (1.0 - chaos * 0.5), sim.max_force);
+    acceleration += steer(cohesion / neighbors, boid.velocity, sim.max_speed, sim.max_force) * 0.78 * (1.0 + chaos * 1.2);
   }
   let pointer_steering = pointer_force(boid.position, boid.phase);
   acceleration += pointer_steering;
@@ -180,7 +186,7 @@ struct Sim {
   pointer_active: f32,
   pointer_mode: f32,
   triangle_size: f32,
-  padding0: f32,
+  time: f32,
   padding1: f32,
 }
 
@@ -341,6 +347,7 @@ export async function createGpuFlock(canvas, {
     speed: clamp(Number.isFinite(speed) ? speed : 1, 0.1, 9),
     mode: 0,
     readIndex: 0,
+    time: 0,
     random,
     lost: false,
   };
@@ -418,6 +425,8 @@ export async function createGpuFlock(canvas, {
       uniform[11] = pointer?.active ? 1 : 0;
       uniform[12] = MODES[pointer?.mode] ?? state.mode;
       uniform[13] = clamp(Math.min(state.width, state.height) / 118, 5.2, 8.8);
+      state.time += steps * dt;
+      uniform[14] = state.time;
       device.queue.writeBuffer(uniformBuffer, 0, uniform);
 
       const encoder = device.createCommandEncoder();
