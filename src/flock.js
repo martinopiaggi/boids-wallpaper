@@ -1,3 +1,5 @@
+import { CONFIG } from "./config.js";
+
 export const TAU = Math.PI * 2;
 
 export function clamp(value, minimum, maximum) {
@@ -70,20 +72,22 @@ export class Flock {
     width = 1280,
     height = 720,
     count = 120,
+    speciesCount = CONFIG.species.count,
     random = Math.random,
-    perception = 104,
-    separationRadius = 34,
-    minSpeed = 46,
-    maxSpeed = 96,
-    maxForce = 310,
+    perception = CONFIG.boids.perception,
+    separationRadius = CONFIG.boids.separationRadius,
+    minSpeed = CONFIG.boids.minSpeed,
+    maxSpeed = CONFIG.boids.maxSpeed,
+    maxForce = CONFIG.boids.maxForce,
     speed = 1,
-    separationWeight = 1.55,
-    alignmentWeight = 1.05,
-    cohesionWeight = 0.78,
+    separationWeight = CONFIG.boids.separationWeight,
+    alignmentWeight = CONFIG.boids.alignmentWeight,
+    cohesionWeight = CONFIG.boids.cohesionWeight,
   } = {}) {
     this.width = Math.max(1, width);
     this.height = Math.max(1, height);
     this.random = random;
+    this.speciesCount = clamp(Math.round(Number(speciesCount) || 1), 1, CONFIG.species.count);
     this.perception = Math.max(1, perception);
     this.separationRadius = Math.max(1, separationRadius);
     this.baseMinSpeed = Math.max(0, minSpeed);
@@ -123,13 +127,13 @@ export class Flock {
   }
 
   setSpeed(value) {
-    this.speed = clamp(Number.isFinite(value) ? value : 1, 0.1, 9);
+    this.speed = clamp(Number.isFinite(value) ? value : 1, CONFIG.flock.speedMin, CONFIG.flock.speedMax);
     return this.speed;
   }
 
   setCount(value) {
-    const next = clamp(Math.round(Number(value) || 0), 0, 4096);
-    while (this.boids.length < next) this.boids.push(this.createBoid());
+    const next = clamp(Math.round(Number(value) || 0), 0, CONFIG.render.capacity);
+    while (this.boids.length < next) this.boids.push(this.createBoid(this.boids.length));
     while (this.accelerations.length < next) this.accelerations.push({ x: 0, y: 0 });
     this.boids.length = next;
     this.accelerations.length = next;
@@ -141,7 +145,7 @@ export class Flock {
     return this.setCount(count);
   }
 
-  createBoid() {
+  createBoid(index = this.boids.length) {
     const angle = this.random() * TAU;
     const cosine = Math.cos(angle);
     const sine = Math.sin(angle);
@@ -154,6 +158,7 @@ export class Flock {
       fx: cosine,
       fy: sine,
       phase: this.random(),
+      species: index % this.speciesCount,
     };
   }
 
@@ -272,9 +277,13 @@ export class Flock {
     const halfHeight = this.height / 2;
     const maxForce = this.maxForce;
     const maxSpeed = this.maxSpeed;
+    const speciesCount = this.speciesCount;
+    const affinity = CONFIG.species.affinity;
 
     for (let index = 0; index < this.boids.length; index += 1) {
       const boid = this.boids[index];
+      const species = ((boid.species ?? 0) % speciesCount + speciesCount) % speciesCount;
+      const affinityRow = species * speciesCount;
       const centerX = Math.floor(boid.x / this.cellSize);
       const centerY = Math.floor(boid.y / this.cellSize);
       let separationX = 0;
@@ -284,6 +293,7 @@ export class Flock {
       let cohesionX = 0;
       let cohesionY = 0;
       let neighbors = 0;
+      let alignmentNeighbors = 0;
 
       for (let offsetY = -1; offsetY <= 1; offsetY += 1) {
         const cellY = this.positiveModulo(centerY + offsetY, this.rows);
@@ -298,6 +308,8 @@ export class Flock {
             const neighborIndex = cell[neighborSlot];
             if (neighborIndex === index) continue;
             const neighbor = this.boids[neighborIndex];
+            const neighborSpecies = ((neighbor.species ?? 0) % speciesCount + speciesCount) % speciesCount;
+            const attraction = affinity[affinityRow + neighborSpecies] ?? 0;
             let dx = neighbor.x - boid.x;
             let dy = neighbor.y - boid.y;
             if (dx > halfWidth) dx -= this.width;
@@ -308,13 +320,17 @@ export class Flock {
             if (distanceSquared > perceptionSquared) continue;
 
             neighbors += 1;
-            alignmentX += neighbor.vx;
-            alignmentY += neighbor.vy;
-            cohesionX += dx;
-            cohesionY += dy;
+            cohesionX += dx * attraction;
+            cohesionY += dy * attraction;
+            if (neighborSpecies === species) {
+              alignmentX += neighbor.vx;
+              alignmentY += neighbor.vy;
+              alignmentNeighbors += 1;
+            }
             if (distanceSquared < separationSquared && distanceSquared > 0.000001) {
-              separationX -= dx / distanceSquared;
-              separationY -= dy / distanceSquared;
+              const repel = attraction < 0 ? 1 - attraction * 1.2 : 1;
+              separationX -= (dx / distanceSquared) * repel;
+              separationY -= (dy / distanceSquared) * repel;
             }
           }
         }
@@ -323,6 +339,7 @@ export class Flock {
       let accelerationX = 0;
       let accelerationY = 0;
       if (neighbors > 0) {
+        const chaos = chaosFactor(boid.x, boid.y, boid.phase, time);
         const steer = steerInto(
           this.steerScratch,
           separationX,
@@ -332,18 +349,19 @@ export class Flock {
           maxSpeed,
           maxForce,
         );
-        const chaos = chaosFactor(boid.x, boid.y, boid.phase, time);
         accelerationX += steer.x * this.separationWeight * (1 + chaos * 0.2);
         accelerationY += steer.y * this.separationWeight * (1 + chaos * 0.2);
-        const alignmentWeight = this.alignmentWeight * (1 - chaos * 0.5);
-        const alignment = capInto(
-          this.steerScratch,
-          (alignmentX / neighbors - boid.vx) * alignmentWeight,
-          (alignmentY / neighbors - boid.vy) * alignmentWeight,
-          maxForce,
-        );
-        accelerationX += alignment.x;
-        accelerationY += alignment.y;
+        if (alignmentNeighbors > 0) {
+          const alignmentWeight = this.alignmentWeight * (1 - chaos * 0.5);
+          const alignment = capInto(
+            this.steerScratch,
+            (alignmentX / alignmentNeighbors - boid.vx) * alignmentWeight,
+            (alignmentY / alignmentNeighbors - boid.vy) * alignmentWeight,
+            maxForce,
+          );
+          accelerationX += alignment.x;
+          accelerationY += alignment.y;
+        }
         const cohesionWeight = this.cohesionWeight * (1 + chaos * 1.2);
         const cohesion = steerInto(
           this.steerScratch,

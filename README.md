@@ -1,87 +1,30 @@
 # Boids Wallpaper
 
-![Boids flock preview](assets/thumbnail.png)
+![Boids wallpaper in motion](boids-wallpaper.gif)
 
-A classic 2D boids simulation: every triangle follows three local rules—**separation**, **alignment**, and **cohesion**—inside a seamless toroidal world. It runs as a normal web page or as a native-feeling [Lively Wallpaper](https://github.com/rocksdanister/lively) with no runtime dependencies.
+A standalone **Windows desktop wallpaper**: white boids on black, behind your desktop icons. No Lively Wallpaper, browser tab, or .NET installation needed. Requires Windows 10/11 (x64) and the Microsoft Edge WebView2 Evergreen Runtime (normally installed with Edge).
 
-## Run it
+## Download and run
 
-```powershell
-npm start
-```
+Download `BoidsWallpaper-win-x64.zip` from [Releases](https://github.com/martinopiaggi/boids-wallpaper/releases), extract, and run `BoidsWallpaper.exe` — one self-contained file, nothing else to install. The tray icon offers **Settings**, **Pause**, **Reattach to desktop**, and **Exit**. Double-click the tray icon for settings; to quit without a tray icon, run `BoidsWallpaper.exe --exit`. It does not replace your saved Windows wallpaper and does not start automatically at login.
 
-Open <http://127.0.0.1:4173>. The project has no install step or third-party packages.
+Settings are saved in `%LOCALAPPDATA%\BoidsWallpaper\settings.json`; startup errors go to `host.log` there. If WebView2 is missing, [install the Evergreen Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/). For a regular window rather than wallpaper, run `BoidsWallpaper.exe --preview`.
 
-### Browser controls
+## Build from source
 
-- Move the pointer to guide the flock. Clicks do not change it.
-- Press `Space` to pause or resume.
-- Press `F` for fullscreen.
-
-## Standalone Windows desktop
-
-`windows/Boids.Desktop` is a self-contained WinForms/WebView2 host. It places the same page behind the desktop icons, without Lively, and exposes Pause, Settings, Reattach, and Exit through its tray icon. `--preview` opens a normal window instead. Build it with the .NET 8 SDK:
+Install the [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0). From the repo root in PowerShell:
 
 ```powershell
-dotnet publish windows/Boids.Desktop/Boids.Desktop.csproj -c Release -r win-x64 --self-contained true -o dist/BoidsWallpaper-win-x64
+./scripts/package-windows.ps1
 ```
 
-If `dotnet --list-sdks` prints "No SDKs were found", the command is hitting a runtime-only host (a `dotnet.exe` from a runtime/app install). Point it at the SDK host instead, for example:
+The release-ready zip is `dist/BoidsWallpaper-win-x64.zip`, containing only `BoidsWallpaper.exe` (web assets are embedded in it). Run `npm run check` for simulation and packaging checks (Node 18+; no npm install needed). Push a `v*` tag to build and publish this zip as a GitHub Release; manual workflow runs create a downloadable CI artifact without publishing a release.
 
-```powershell
-& "$env:USERPROFILE\.dotnet\dotnet.exe" publish windows/Boids.Desktop/Boids.Desktop.csproj -c Release -r win-x64 --self-contained true -o dist/BoidsWallpaper-win-x64
-```
+## Configuration
 
-`scripts/package-windows.ps1` resolves a working SDK itself (`-Sdk <path>` overrides it), clears stale files from the output folder, and fails with an actionable message when no SDK is installed.
+- **As a user**: tray icon → **Settings** for boid count, speed, fps, cursor mode, and pause rules.
+- **As a developer**: all simulation defaults and tuning live in [`src/config.js`](src/config.js), one commented object. Rebuild with `./scripts/package-windows.ps1` after editing. If you change a runtime range, mirror it in the host's `Program.cs` / `DesktopApp.cs`.
 
-The publish is a single compressed `BoidsWallpaper.exe` (≈48 MB) plus `wallpaper\`. `dotnet publish` never removes files that an earlier publish left behind, so clear the output folder when switching between layouts; the script does that for you.
+The simulation is in `src/`; the WinForms/WebView2 desktop host is in `windows/Boids.Desktop/`. CPU Canvas is the fallback if WebGPU is unavailable.
 
-### Size
-
-The app talks to the WebView2 runtime; the exact build only decides where that runtime comes from.
-
-| Configuration | On disk |
-| --- | --- |
-| Bundled fixed-version WebView2 runtime (`runtime\`) | ≈850 MB |
-| Evergreen WebView2 runtime, single-file app | ≈48 MB |
-| Evergreen WebView2 runtime, app relies on the installed .NET 8 Desktop Runtime (`--no-self-contained -r win-x64`) | ≈1.3 MB |
-
-Pick the first row only when the target PC has neither the Evergreen runtime nor a way to get it: Windows 11 and current Windows 10 installs ship it through Edge. To build that offline variant, extract a fixed-version CAB into the package with `scripts/package-windows.ps1 -RuntimeCab <path-to-cab>`; `dist\webview2-offline-runtime` holds a previously extracted copy and can be dropped back in with `xcopy /e /i /y dist\webview2-offline-runtime dist\BoidsWallpaper-win-x64\runtime`. The host prefers `runtime\msedgewebview2.exe` when it is there and otherwise uses the installed Evergreen runtime.
-
-Settings are stored in `%LOCALAPPDATA%\BoidsWallpaper\settings.json`; the original desktop wallpaper is never modified.
-
-## Install in Lively Wallpaper
-
-1. Open Lively Wallpaper.
-2. Choose **Library** → **Add wallpaper**.
-3. Select this repository folder.
-4. Select **Boids** and apply it to a display.
-
-The root `LivelyInfo.json` and `LivelyProperties.json` provide the thumbnail, preview, playback integration, and controls for flock size, speed, and cursor behavior. Triangles are exactly white on exactly black. The pointer position strongly steers most of the flock for as long as it remains on screen, while clicks have no effect. The simulation runs at 120 Hz and drawing is capped at 120 fps. WebGPU runs both the flocking rules and the triangle drawing on the graphics card; Canvas 2D is the automatic fallback. Lively can pause the simulation when playback is disabled or the wallpaper is not visible.
-
-## Controls in Lively
-
-| Property | Values | Default |
-| --- | --- | --- |
-| Flock size | 20–4096 | 2048 |
-| Speed | 0.25–9× | 6× |
-| Cursor | Orbit, Follow, Avoid, Ignore | Orbit |
-
-## Development
-
-```powershell
-npm test
-npm run check
-```
-
-The CPU simulation is in [`src/flock.js`](src/flock.js). [`src/webgpu.js`](src/webgpu.js) runs the same rules in a WGSL compute shader and draws one instanced triangle per boid, with the state kept on the GPU. [`src/main.js`](src/main.js) selects that path when WebGPU is available and otherwise uses Canvas 2D. A spatial hash limits the CPU fallback to nine nearby cells. On a slower display, physics still advances at 120 Hz and the browser presents the latest frame at the monitor rate.
-
-Regenerate the committed preview assets with Python and Pillow:
-
-```powershell
-python tools/generate-assets.py
-```
-
-## License
-
-[MIT](LICENSE)
+[MIT license](LICENSE)

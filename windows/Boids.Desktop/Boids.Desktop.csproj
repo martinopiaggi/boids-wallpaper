@@ -26,16 +26,8 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4191.47" />
-    <Content Include="..\..\index.html;..\..\styles.css">
-      <Link>wallpaper\%(Filename)%(Extension)</Link>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-    </Content>
-    <Content Include="..\..\src\*.js">
-      <Link>wallpaper\src\%(Filename)%(Extension)</Link>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-    </Content>
+    <EmbeddedResource Include="..\..\index.html;..\..\styles.css" LogicalName="wallpaper.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="..\..\src\*.js" LogicalName="wallpaper.src.%(Filename)%(Extension)" />
   </ItemGroup>
   <Target Name="RemoveUnusedWpfReference" BeforeTargets="ResolveAssemblyReferences">
     <ItemGroup>

@@ -2,12 +2,11 @@
   "name": "boids-wallpaper",
   "version": "1.0.0",
   "private": true,
-  "description": "A classic 2D boids simulation packaged as a Lively Wallpaper.",
+  "description": "Standalone Windows boids desktop wallpaper.",
   "type": "module",
   "scripts": {
-    "start": "node scripts/serve.mjs",
     "test": "node --test",
-    "check": "node --check src/flock.js && node --check src/webgpu.js && node --check src/main.js && node --check scripts/serve.mjs && node --test"
+    "check": "node --check src/config.js && node --check src/flock.js && node --check src/webgpu.js && node --check src/main.js && node --test"
   },
   "engines": {
     "node": ">=18"

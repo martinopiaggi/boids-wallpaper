@@ -57,15 +57,13 @@ internal sealed class DesktopApp : ApplicationContext
             if (environment is null)
             {
                 busy = true;
-                string runtime = Path.Combine(AppContext.BaseDirectory, "runtime");
-                string? fixedRuntime = File.Exists(Path.Combine(runtime, "msedgewebview2.exe")) ? runtime : null;
                 string profile = options.SmokeDirectory is null
                     ? Path.Combine(AppFiles.Root, "BrowserData")
                     : Path.Combine(options.SmokeDirectory, "BrowserData");
-                if (fixedRuntime is null) CoreWebView2Environment.GetAvailableBrowserVersionString();
-                environment = await CoreWebView2Environment.CreateAsync(fixedRuntime, profile);
+                CoreWebView2Environment.GetAvailableBrowserVersionString();
+                environment = await CoreWebView2Environment.CreateAsync(null, profile);
                 if (exiting) return;
-                AppFiles.Log($"WebView2 {environment.BrowserVersionString}; bundled={fixedRuntime is not null}");
+                AppFiles.Log($"WebView2 {environment.BrowserVersionString}");
                 await RebuildAsync();
                 busy = false;
             }
@@ -213,7 +211,6 @@ internal sealed class DesktopApp : ApplicationContext
             success = true,
             mode = options.Preview ? "preview" : "desktop",
             browserVersion = environment?.BrowserVersionString,
-            bundledRuntime = File.Exists(Path.Combine(AppContext.BaseDirectory, "runtime", "msedgewebview2.exe")),
             pauseRules = new { fullscreen = settings.PauseFullscreen, battery = settings.PauseBattery },
             monitors = results
         }, AppFiles.Json));

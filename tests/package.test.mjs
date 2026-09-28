@@ -4,35 +4,12 @@ import test from "node:test";
 
 const root = new URL("../", import.meta.url);
 
-async function json(name) {
-  return JSON.parse(await readFile(new URL(name, root), "utf8"));
-}
-
-test("Lively package points to existing web runtime assets", async () => {
-  const info = await json("LivelyInfo.json");
-  assert.equal(info.Type, 1);
-  assert.equal(info.FileName, "index.html");
-  await Promise.all(
-    [info.FileName, info.Thumbnail, info.Preview].map(path => access(new URL(path, root))),
-  );
-});
-
-test("Lively properties use supported controls", async () => {
-  const properties = await json("LivelyProperties.json");
-  assert.equal(properties.trails, undefined);
-  assert.equal(properties.glow, undefined);
-  assert.equal(properties.palette, undefined);
-  assert.equal(properties.scatter, undefined);
-  assert.equal(properties.speed.value, 6);
-  assert.equal(properties.count.value, 2048);
-  assert.equal(properties.count.max, 4096);
-  const supported = new Set(["slider", "dropdown", "checkbox", "button"]);
-  for (const [name, property] of Object.entries(properties)) {
-    assert.ok(property.text, `${name} needs a label`);
-    assert.ok(supported.has(property.type), `${name} has an unsupported type`);
-    if (property.type === "slider") {
-      assert.ok(property.min < property.max);
-      assert.ok(property.value >= property.min && property.value <= property.max);
-    }
-  }
+test("Windows package includes the wallpaper entry point and its module graph", async () => {
+  const project = await readFile(new URL("windows/Boids.Desktop/Boids.Desktop.csproj", root), "utf8");
+  assert.match(project, /index\.html;.*styles\.css/);
+  assert.match(project, /src\\\*\.js/);
+  const html = await readFile(new URL("index.html", root), "utf8");
+  assert.match(html, /src="src\/main\.js"/);
+  for (const path of ["styles.css", "src/main.js", "src/config.js", "src/flock.js", "src/webgpu.js", "src/host.js"])
+    await access(new URL(path, root));
 });

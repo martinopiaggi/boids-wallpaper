@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Reflection;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
 
@@ -57,7 +58,29 @@ internal sealed class WallpaperWindow : Form
         core.Settings.AreDefaultScriptDialogsEnabled = false;
         core.Settings.IsGeneralAutofillEnabled = false;
         core.Settings.IsPasswordAutosaveEnabled = false;
-        core.SetVirtualHostNameToFolderMapping("boids.local", Path.Combine(AppContext.BaseDirectory, "wallpaper"), CoreWebView2HostResourceAccessKind.DenyCors);
+        core.AddWebResourceRequestedFilter("https://boids.local/*", CoreWebView2WebResourceContext.All, CoreWebView2WebResourceRequestSourceKinds.All);
+        core.WebResourceRequested += (_, e) =>
+        {
+            var path = new Uri(e.Request.Uri).AbsolutePath.TrimStart('/');
+            string? mime = Path.GetExtension(path) switch
+            {
+                ".html" => "text/html",
+                ".css" => "text/css",
+                ".js" => "text/javascript",
+                _ => null
+            };
+            using var resource = mime is null ? null : Assembly.GetExecutingAssembly()
+                .GetManifestResourceStream("wallpaper." + path.Replace('/', '.'));
+            // WebView2 reads the response after this handler returns, so give it an independent stream.
+            var content = new MemoryStream();
+            resource?.CopyTo(content);
+            content.Position = 0;
+            e.Response = environment.CreateWebResourceResponse(
+                content,
+                resource is null ? 404 : 200,
+                resource is null ? "Not Found" : "OK",
+                resource is null ? "" : $"Content-Type: {mime}; charset=utf-8");
+        };
         core.NavigationStarting += (_, e) =>
         {
             if (!Uri.TryCreate(e.Uri, UriKind.Absolute, out var uri) || uri.Scheme != "https" || uri.Host != "boids.local") e.Cancel = true;

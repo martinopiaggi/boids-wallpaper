@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { Flock, createRandom, wrap, wrappedDelta } from "../src/flock.js";
+import { CONFIG } from "../src/config.js";
 
 function flockWith(boids, options = {}) {
   const flock = new Flock({ width: 100, height: 100, random: createRandom(7), ...options });
@@ -97,6 +98,23 @@ test("inactive and ignored pointers do not steer the flock", () => {
   ]) {
     assert.deepEqual(flock.pointerForce(boid, pointer), { x: 0, y: 0 });
   }
+});
+
+test("cross-species affinity attracts and repels", () => {
+  const flock = flockWith([
+    { x: 40, y: 50, vx: 0, vy: 0, species: 0 },
+    { x: 55, y: 50, vx: 0, vy: 0, species: 2 },
+  ], { count: 0 });
+  flock.step(1 / 60);
+  assert.ok(flock.boids[0].vx < 0, "species 0 flees the predator");
+  assert.ok(flock.boids[1].vx < 0, "species 2 chases species 0");
+});
+
+test("species 0 and 1 bond while species 2 repels itself", () => {
+  const { count, affinity } = CONFIG.species;
+  const at = (from, to) => affinity[from * count + to];
+  assert.ok(at(0, 1) > 0 && at(1, 0) > 0);
+  assert.ok(at(2, 2) < 0);
 });
 
 test("count changes are deterministic with a seeded generator", () => {

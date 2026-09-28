@@ -1,6 +1,7 @@
+import { CONFIG } from "./config.js";
 import { clamp, createRandom } from "./flock.js";
 
-export const GPU_CAPACITY = 4096;
+export const GPU_CAPACITY = CONFIG.render.capacity;
 const STRIDE_FLOATS = 8;
 const STRIDE_BYTES = STRIDE_FLOATS * 4;
 const MODES = Object.freeze({ orbit: 0, follow: 1, avoid: 2, ignore: 3 });
@@ -10,7 +11,7 @@ struct Boid {
   position: vec2<f32>,
   velocity: vec2<f32>,
   phase: f32,
-  padding0: f32,
+  species: f32,
   padding1: f32,
   padding2: f32,
 }
@@ -32,6 +33,7 @@ struct Sim {
   triangle_size: f32,
   time: f32,
   padding1: f32,
+  affinity: array<vec4<f32>, 3>,
 }
 
 @group(0) @binding(0) var<storage, read> source_boids: array<Boid>;
@@ -97,16 +99,20 @@ fn simulate(@builtin(global_invocation_id) id: vec3<u32>) {
   if (index >= count) { return; }
 
   let boid = source_boids[index];
+  let species = i32(boid.species);
   let perception_squared = sim.perception * sim.perception;
   let separation_squared = sim.separation_radius * sim.separation_radius;
   var separation = vec2<f32>(0.0);
   var alignment = vec2<f32>(0.0);
   var cohesion = vec2<f32>(0.0);
   var neighbors = 0.0;
+  var alignment_neighbors = 0.0;
 
   for (var other = 0u; other < count; other++) {
     if (other == index) { continue; }
     let neighbor = source_boids[other];
+    let other_species = i32(neighbor.species);
+    let attraction = sim.affinity[species][other_species];
     let delta = vec2<f32>(
       shortest(neighbor.position.x - boid.position.x, sim.width),
       shortest(neighbor.position.y - boid.position.y, sim.height),
@@ -114,10 +120,13 @@ fn simulate(@builtin(global_invocation_id) id: vec3<u32>) {
     let distance_squared = dot(delta, delta);
     if (distance_squared > perception_squared) { continue; }
     neighbors += 1.0;
-    alignment += neighbor.velocity;
-    cohesion += delta;
+    cohesion += delta * attraction;
+    if (other_species == species) {
+      alignment += neighbor.velocity;
+      alignment_neighbors += 1.0;
+    }
     if (distance_squared < separation_squared && distance_squared > 0.000001) {
-      separation -= delta / distance_squared;
+      separation -= delta / distance_squared * select(1.0, 1.0 - attraction * 1.2, attraction < 0.0);
     }
   }
 
@@ -125,7 +134,9 @@ fn simulate(@builtin(global_invocation_id) id: vec3<u32>) {
   if (neighbors > 0.0) {
     let chaos = chaos_factor(boid.position, boid.phase);
     acceleration += steer(separation, boid.velocity, sim.max_speed, sim.max_force) * 1.55 * (1.0 + chaos * 0.2);
-    acceleration += limit((alignment / neighbors - boid.velocity) * 1.05 * (1.0 - chaos * 0.5), sim.max_force);
+    if (alignment_neighbors > 0.0) {
+      acceleration += limit((alignment / alignment_neighbors - boid.velocity) * 1.05 * (1.0 - chaos * 0.5), sim.max_force);
+    }
     acceleration += steer(cohesion / neighbors, boid.velocity, sim.max_speed, sim.max_force) * 0.78 * (1.0 + chaos * 1.2);
   }
   let pointer_steering = pointer_force(boid.position, boid.phase);
@@ -153,7 +164,7 @@ fn simulate(@builtin(global_invocation_id) id: vec3<u32>) {
     ),
     velocity,
     boid.phase,
-    0.0,
+    boid.species,
     0.0,
     0.0,
   );
@@ -166,7 +177,7 @@ struct Boid {
   position: vec2<f32>,
   velocity: vec2<f32>,
   phase: f32,
-  padding0: f32,
+  species: f32,
   padding1: f32,
   padding2: f32,
 }
@@ -188,6 +199,7 @@ struct Sim {
   triangle_size: f32,
   time: f32,
   padding1: f32,
+  affinity: array<vec4<f32>, 3>,
 }
 
 struct VertexOutput {
@@ -259,6 +271,7 @@ function createState(random, count, width, height, minSpeed, maxSpeed) {
     state[offset + 2] = cosine * flight;
     state[offset + 3] = sine * flight;
     state[offset + 4] = random();
+    state[offset + 5] = index % CONFIG.species.count;
   }
   return state;
 }
@@ -303,7 +316,7 @@ export async function createGpuFlock(canvas, {
     ],
   });
   const uniformBuffer = device.createBuffer({
-    size: 16 * 4,
+    size: 28 * 4,
     usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
   });
   const boidBuffers = [0, 1].map(() => device.createBuffer({
@@ -336,15 +349,20 @@ export async function createGpuFlock(canvas, {
     primitive: { topology: "triangle-list" },
   });
 
-  const uniform = new Float32Array(16);
-  const baseMinSpeed = 46;
-  const baseMaxSpeed = 96;
-  const baseMaxForce = 310;
+  const uniform = new Float32Array(28);
+  for (let row = 0; row < CONFIG.species.count; row += 1) {
+    for (let column = 0; column < CONFIG.species.count; column += 1) {
+      uniform[16 + row * 4 + column] = CONFIG.species.affinity[row * CONFIG.species.count + column];
+    }
+  }
+  const baseMinSpeed = CONFIG.boids.minSpeed;
+  const baseMaxSpeed = CONFIG.boids.maxSpeed;
+  const baseMaxForce = CONFIG.boids.maxForce;
   const state = {
     width: Math.max(1, width),
     height: Math.max(1, height),
     count: clamp(Math.round(count) || 0, 0, GPU_CAPACITY),
-    speed: clamp(Number.isFinite(speed) ? speed : 1, 0.1, 9),
+    speed: clamp(Number.isFinite(speed) ? speed : 1, CONFIG.flock.speedMin, CONFIG.flock.speedMax),
     mode: 0,
     readIndex: 0,
     time: 0,
@@ -403,7 +421,7 @@ export async function createGpuFlock(canvas, {
       state.count = next;
     },
     setSpeed(value) {
-      state.speed = clamp(Number.isFinite(value) ? value : 1, 0.1, 9);
+      state.speed = clamp(Number.isFinite(value) ? value : 1, CONFIG.flock.speedMin, CONFIG.flock.speedMax);
     },
     setMode(mode) {
       state.mode = MODES[mode] ?? 0;
@@ -424,7 +442,11 @@ export async function createGpuFlock(canvas, {
       uniform[10] = pointer?.y ?? 0;
       uniform[11] = pointer?.active ? 1 : 0;
       uniform[12] = MODES[pointer?.mode] ?? state.mode;
-      uniform[13] = clamp(Math.min(state.width, state.height) / 118, 5.2, 8.8);
+      uniform[13] = clamp(
+        Math.min(state.width, state.height) / CONFIG.render.triangleDivisor,
+        CONFIG.render.triangleMin,
+        CONFIG.render.triangleMax,
+      );
       state.time += steps * dt;
       uniform[14] = state.time;
       device.queue.writeBuffer(uniformBuffer, 0, uniform);

@@ -1,3 +1,4 @@
+import { CONFIG } from "./config.js";
 import { Flock, clamp, createRandom } from "./flock.js";
 import { GPU_CAPACITY, createGpuFlock } from "./webgpu.js";
 import { attachHostBridge } from "./host.js";
@@ -6,20 +7,20 @@ let canvas = document.querySelector("#boids");
 const errorBox = document.querySelector("#error");
 const FOREGROUND = "#fff";
 
-const TARGET_FPS = 120;
+const TARGET_FPS = CONFIG.animation.fps;
 const FIXED_STEP = 1 / TARGET_FPS;
 let frameMilliseconds = 1000 / TARGET_FPS;
 
 const defaults = Object.freeze({
-  count: 2048,
-  speed: 6,
+  count: CONFIG.flock.count,
+  speed: CONFIG.flock.speed,
   fps: TARGET_FPS,
-  interaction: "orbit",
+  interaction: CONFIG.flock.interaction,
 });
 
 const config = { ...defaults };
 const pointer = { x: 0, y: 0, active: false, mode: config.interaction };
-const interactionModes = Object.freeze(["orbit", "follow", "avoid", "ignore"]);
+const interactionModes = CONFIG.flock.interactions;
 
 let width = 1;
 let height = 1;
@@ -76,17 +77,17 @@ function normalizeDropdown(value, items, fallback) {
 function applyProperty(name, value) {
   switch (name) {
     case "count":
-      config.count = clamp(Math.round(parseNumber(value, config.count)), 20, GPU_CAPACITY);
+      config.count = clamp(Math.round(parseNumber(value, config.count)), CONFIG.flock.countMin, GPU_CAPACITY);
       gpu?.setCount(config.count);
       flock?.setCount(config.count);
       break;
     case "speed":
-      config.speed = clamp(parseNumber(value, config.speed), 0.25, 9);
+      config.speed = clamp(parseNumber(value, config.speed), CONFIG.flock.speedMin, CONFIG.flock.speedMax);
       gpu?.setSpeed(config.speed);
       flock?.setSpeed(config.speed);
       break;
     case "fps":
-      config.fps = [30, 60, 120].includes(Number(value)) ? Number(value) : config.fps;
+      config.fps = CONFIG.animation.fpsOptions.includes(Number(value)) ? Number(value) : config.fps;
       frameMilliseconds = 1000 / config.fps;
       nextFrameAt = performance.now();
       break;
@@ -118,7 +119,11 @@ function resize() {
     canvas.height = renderHeight;
   }
 
-  triangleSize = clamp(Math.min(width, height) / 118, 5.2, 8.8);
+  triangleSize = clamp(
+    Math.min(width, height) / CONFIG.render.triangleDivisor,
+    CONFIG.render.triangleMin,
+    CONFIG.render.triangleMax,
+  );
   if (backend === "webgpu") {
     gpu.resize(width, height);
     return;
@@ -264,16 +269,6 @@ function installInteractions() {
   resizeObserver.observe(canvas);
 }
 
-function exposeLivelyBridge() {
-  window.boidsApplyProperty = applyProperty;
-  window.boidsSetPaused = setHostPaused;
-  for (const [name, value] of window.__boidsPendingProperties ?? []) applyProperty(name, value);
-  window.__boidsPendingProperties?.clear();
-  if (typeof window.__boidsPendingPaused === "boolean") {
-    setHostPaused(window.__boidsPendingPaused);
-  }
-}
-
 function startCanvasFallback() {
   gpu?.dispose();
   gpu = null;
@@ -293,7 +288,6 @@ function startCanvasFallback() {
 }
 
 async function start() {
-  exposeLivelyBridge();
   const rect = canvas.getBoundingClientRect();
   width = Math.max(1, rect.width);
   height = Math.max(1, rect.height);
