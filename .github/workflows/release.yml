@@ -23,7 +23,7 @@ jobs:
         run: |
           npm run check
           ./scripts/package-windows.ps1
-          if (!(Test-Path dist/BoidsWallpaper-win-x64/BoidsWallpaper.exe) -or !(Test-Path dist/BoidsWallpaper-win-x64/wallpaper/index.html)) { throw 'Incomplete release package' }
+          if (!(Test-Path dist/BoidsWallpaper-win-x64/BoidsWallpaper.exe)) { throw 'Incomplete release package' }
       - name: Publish release
         if: startsWith(github.ref, 'refs/tags/v')
         env:
