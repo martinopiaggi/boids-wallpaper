@@ -2,7 +2,9 @@
 
 ![Boids wallpaper in motion](boids-wallpaper.gif)
 
-A standalone **Windows desktop wallpaper**: white boids on black, behind your desktop icons. No Lively Wallpaper, browser tab, or .NET installation needed. Requires Windows 10/11 (x64) and the Microsoft Edge WebView2 Evergreen Runtime (normally installed with Edge).
+Windows desktop wallpaper with white boids on black, behind your desktop icons.
+
+Requires Windows 10/11 (x64) and the Microsoft Edge WebView2 Evergreen Runtime (normally installed with Edge).
 
 ## Download and run
 
