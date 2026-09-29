@@ -8,7 +8,7 @@ Requires Windows 10/11 (x64) and the Microsoft Edge WebView2 Evergreen Runtime (
 
 ## Download and run
 
-Download `BoidsWallpaper-win-x64.zip` from [Releases](https://github.com/martinopiaggi/boids-wallpaper/releases), extract, and run `BoidsWallpaper.exe` — one self-contained file, nothing else to install. The tray icon offers **Settings**, **Pause**, **Reattach to desktop**, and **Exit**. Double-click the tray icon for settings; to quit without a tray icon, run `BoidsWallpaper.exe --exit`. It does not replace your saved Windows wallpaper and does not start automatically at login.
+Download `BoidsWallpaper-win-x64.zip` from [Releases](https://github.com/martinopiaggi/boids-wallpaper/releases), extract, and run `BoidsWallpaper.exe` — one self-contained file, nothing else to install. The tray icon offers **Settings**, **Pause**, **Reattach to desktop**, and **Exit**. Double-click the tray icon for settings; to quit without a tray icon, run `BoidsWallpaper.exe --exit`. It does not replace your saved Windows wallpaper and does not start automatically at login. To start it with Windows, drop a shortcut to `BoidsWallpaper.exe` in `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup`.
 
 Settings are saved in `%LOCALAPPDATA%\BoidsWallpaper\settings.json`; startup errors go to `host.log` there. If WebView2 is missing, [install the Evergreen Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/). For a regular window rather than wallpaper, run `BoidsWallpaper.exe --preview`.
 
